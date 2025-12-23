@@ -1,0 +1,20 @@
+#Python
+__pycache__/
+dist/
+*.egg-info/
+
+# mypy
+.mypy_cache/
+
+# IDE
+.vscode/
+
+# Ruff
+.ruff_cache/
+
+# Venv
+venv/
+
+# Claude Vault specific
+.claude-vault/
+*.db
