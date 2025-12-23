@@ -49,6 +49,7 @@ python tests/test_parser.py
 
 ### Install Ollama (Optional for AI tagging)
 ```bash
+# On macOS
 brew install ollama
 
 # Start ollama
@@ -57,6 +58,124 @@ ollama serve
 # Pull a balanced model (quality/speed)
 ollama pull llama3.2:3b
 ```
+
+## Quick Usage
+
+### 1. Export Your Claude Conversations
+
+1. Go to [claude.ai](https://claude.ai)
+2. Click profile → Settings
+3. Export conversations (downloads `conversations.json`)
+
+### 2. Initialize Vault
+
+```bash
+# Navigate to your Obsidian vault
+cd ~/Documents/ObsidianVault
+
+# Initialize Claude Vault
+claude-vault init
+```
+
+### 3. Sync Conversations
+```bash
+# Import all conversations
+claude-vault sync ~/Downloads/conversations.json
+```
+
+### 4. Check Status
+```bash
+claude-vault status
+```
+
+## Common Commands
+```bash
+# Search conversations
+claude-vault search "python"
+
+# Search with tag filter
+claude-vault search "API" --tag code
+
+# Regenerate tags with AI
+claude-vault retag
+
+# Verify vault integrity
+claude-vault verify
+
+# Clean up orphaned entries
+claude-vault verify --cleanup
+```
+
+## Troubleshooting
+
+**"Ollama not running":** Start with `ollama serve`
+
+**"Module not found:"** Reinstall with `pip install -e .`
+**"Not initialized:"** Run `claude-vault init` first
+
+## License
+
+Claude Vault is available under a **dual-license model**:
+
+### 🆓 Open Source License (AGPL-3.0)
+
+**Free for:**
+- ✅ Personal use
+- ✅ Open source projects
+- ✅ Educational purposes
+- ✅ Research and academic use
+- ✅ Non-commercial applications
+
+**Requirements under AGPL-3.0:**
+- Must disclose source code of any modifications
+- Must keep the same license (AGPL-3.0)
+- Must provide source code to users (including SaaS/network users)
+- Any derivative work must also be licensed under AGPL-3.0
+
+**Perfect for:** Developers, hobbyists, students, and open-source contributors who want to freely use and modify Claude Vault.
+
+---
+
+### 💼 Commercial License
+
+**Required for:**
+- ❌ Proprietary/closed-source applications
+- ❌ Commercial SaaS products
+- ❌ Enterprise deployments where source code disclosure is not desired
+- ❌ Products that cannot comply with AGPL-3.0 copyleft terms
+
+**Benefits of Commercial License:**
+- ✅ Use Claude Vault in proprietary applications
+- ✅ No obligation to disclose your source code
+- ✅ Freedom from AGPL-3.0 copyleft requirements
+- ✅ Priority support (optional)
+- ✅ Custom modifications and consulting (optional)
+
+**Pricing:** Contact me for a quote based on your use case.
+
+📧 **Contact:** Github
+📝 **Subject:** Claude Vault Commercial License Inquiry
+
+---
+
+### ❓ Which License Do I Need?
+
+| Use Case | License Needed |
+|----------|---------------|
+| Building an open-source tool | AGPL-3.0 (Free) ✅ |
+| Learning/experimenting | AGPL-3.0 (Free) ✅ |
+| Contributing to Claude Vault | AGPL-3.0 (Free) ✅ |
+| Internal company tool (source shared with employees) | AGPL-3.0 (Free) ✅ |
+| Commercial SaaS product | Commercial 💼 |
+| Closed-source application | Commercial 💼 |
+| Selling a product that includes Claude Vault | Commercial 💼 |
+| Enterprise deployment (no source disclosure) | Commercial 💼 |
+
+**Still unsure?** Contact me
+
+---
+
+**Note:** By using, modifying, or distributing Claude Vault without obtaining a commercial license, you agree to comply with the AGPL-3.0 terms.
 
 ### CLI Commands
 
@@ -171,67 +290,3 @@ claude-vault [COMMAND] --help
 claude-vault sync --help
 claude-vault search --help
 ```
-
-## License
-
-Claude Vault is available under a **dual-license model**:
-
-### 🆓 Open Source License (AGPL-3.0)
-
-**Free for:**
-- ✅ Personal use
-- ✅ Open source projects
-- ✅ Educational purposes
-- ✅ Research and academic use
-- ✅ Non-commercial applications
-
-**Requirements under AGPL-3.0:**
-- Must disclose source code of any modifications
-- Must keep the same license (AGPL-3.0)
-- Must provide source code to users (including SaaS/network users)
-- Any derivative work must also be licensed under AGPL-3.0
-
-**Perfect for:** Developers, hobbyists, students, and open-source contributors who want to freely use and modify Claude Vault.
-
----
-
-### 💼 Commercial License
-
-**Required for:**
-- ❌ Proprietary/closed-source applications
-- ❌ Commercial SaaS products
-- ❌ Enterprise deployments where source code disclosure is not desired
-- ❌ Products that cannot comply with AGPL-3.0 copyleft terms
-
-**Benefits of Commercial License:**
-- ✅ Use Claude Vault in proprietary applications
-- ✅ No obligation to disclose your source code
-- ✅ Freedom from AGPL-3.0 copyleft requirements
-- ✅ Priority support (optional)
-- ✅ Custom modifications and consulting (optional)
-
-**Pricing:** Contact me for a quote based on your use case.
-
-📧 **Contact:** Github
-📝 **Subject:** Claude Vault Commercial License Inquiry
-
----
-
-### ❓ Which License Do I Need?
-
-| Use Case | License Needed |
-|----------|---------------|
-| Building an open-source tool | AGPL-3.0 (Free) ✅ |
-| Learning/experimenting | AGPL-3.0 (Free) ✅ |
-| Contributing to Claude Vault | AGPL-3.0 (Free) ✅ |
-| Internal company tool (source shared with employees) | AGPL-3.0 (Free) ✅ |
-| Commercial SaaS product | Commercial 💼 |
-| Closed-source application | Commercial 💼 |
-| Selling a product that includes Claude Vault | Commercial 💼 |
-| Enterprise deployment (no source disclosure) | Commercial 💼 |
-
-**Still unsure?** Contact me
-
----
-
-**Note:** By using, modifying, or distributing Claude Vault without obtaining a commercial license, you agree to comply with the AGPL-3.0 terms.
