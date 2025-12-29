@@ -19,6 +19,15 @@ Claude Vault is a command-line tool that syncs your Claude AI conversations into
 - ✅ **Cross-Conversation Search**: Search across all conversations with context and navigate to related ones
 - ✅ **Smart Relationship Detection**: Automatically finds and links related conversations via common tags
 
+## Key Features of the Code Parser
+
+The JSONL parser handles:
+- ✅ **Session grouping** - Groups messages by `sessionId`
+- ✅ **Tool results** - Shows before/after state for tools
+- ✅ **Timestamps** - Preserves message timing
+- ✅ **Summary as title** - Uses the summary line as conversation title
+- ✅ **Code-specific tags** - Adds 'code-session' tag to differentiate from web chats
+
 ### Prerequisites
 
 - **Python 3.8+**
@@ -83,6 +92,26 @@ claude-vault init
 claude-vault sync ~/Downloads/conversations.json
 ```
 
+## Supported Formats
+
+Claude Vault supports multiple Claude conversation sources:
+
+- **Claude Web Conversations** (.json) - From claude.ai exports
+- **Claude Code History** (.jsonl) - From Claude Code IDE integration
+
+Both formats are automatically detected based on file extension, or you can specify with `--source`:
+
+```bash
+# Auto-detect format
+claude-vault sync conversations.json
+claude-vault sync code-history.jsonl
+# Sync from entire .claude folder
+claude-vault sync ~/.claude
+
+# Explicit source
+claude-vault sync export.json --source web
+claude-vault sync export.jsonl --source code
+
 ### 4. Check Status
 ```bash
 claude-vault status
@@ -111,6 +140,7 @@ claude-vault verify --cleanup
 **"Ollama not running":** Start with `ollama serve`
 
 **"Module not found:"** Reinstall with `pip install -e .`
+
 **"Not initialized:"** Run `claude-vault init` first
 
 ## License

@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from .code_parser import ClaudeCodeHistoryParser
 from .parser import ClaudeExportParser
 from .state import StateManager
 from .sync import SyncEngine
@@ -83,6 +84,7 @@ def init(vault_path: Optional[Path] = None):
 def sync(
     export_path: Path,
     vault_path: Optional[Path] = None,
+    source: str = typer.Option("auto", help="Source type: auto, web, code"),
 ):
     """Sync Claude conversations to markdown files"""
 
@@ -97,9 +99,25 @@ def sync(
         console.print("[yellow]Run 'claude-vault init' first[/yellow]")
         raise typer.Exit(1)
 
+    # Detect format
+    if source == "auto":
+        if export_path.is_dir() and export_path.name == ".claude":
+            source = "code"
+        elif export_path.suffix == ".jsonl":
+            source = "code"
+        else:
+            source = "web"
+
     console.print(f"[blue]📦 Syncing conversations from {export_path.name}...[/blue]\n")
 
+    # Use appropriate parser
+    if source == "code":
+        parser = ClaudeCodeHistoryParser()
+    else:
+        parser = ClaudeExportParser()
+
     engine = SyncEngine(vault_path)
+    engine.parser = parser
 
     with Progress(
         SpinnerColumn(),
