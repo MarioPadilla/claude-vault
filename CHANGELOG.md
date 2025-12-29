@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/MarioPadilla/claude-vault/compare/v0.1.0...v0.2.0) (2025-12-29)
+
+
+### Features
+
+* add support for Claude Code History JSONL format ([ca445e2](https://github.com/MarioPadilla/claude-vault/commit/ca445e232dcd8e57e2d0cfd466b58ed1616867e6))
+
 ## 0.1.0 (2025-12-23)
 
 
