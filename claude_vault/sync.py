@@ -6,22 +6,38 @@ import frontmatter
 
 from .markdown import MarkdownGenerator
 from .models import Conversation
-from .parser import ClaudeExportParser
+from .parser import ChatGPTExportParser, ClaudeExportParser
 from .state import StateManager
-from .tagging import OfflineTagGenerator
+from .tagging import OfflineTagGenerator, TagResult
 
 
 class SyncEngine:
     """Main sync engine for Claude Vault"""
 
-    def __init__(self, vault_path: Path):
+    def __init__(
+        self,
+        vault_path: Path,
+        source: str = "claude",
+        tag_model: str = "llama3.2:3b",
+        tag_mode: str = "quick",
+        use_hierarchy: bool = False,
+    ):
         self.vault_path = vault_path
+        self.source = source
+        self.tag_mode = tag_mode
+        self.use_hierarchy = use_hierarchy
         self.state = StateManager(vault_path)
-        self.parser = ClaudeExportParser()
-        self.markdown_gen = MarkdownGenerator()
+
+        # Select appropriate parser based on source
+        if source == "chatgpt":
+            self.parser = ChatGPTExportParser()
+        else:
+            self.parser = ClaudeExportParser()
+
+        self.markdown_gen = MarkdownGenerator(source=source, use_hierarchy=use_hierarchy)
         self.conversations_dir = vault_path / "conversations"
         self.conversations_dir.mkdir(exist_ok=True)
-        self.tag_generator = OfflineTagGenerator()
+        self.tag_generator = OfflineTagGenerator(model=tag_model)
 
     def sync(self, export_path: Path) -> Dict:
         """
@@ -39,16 +55,12 @@ class SyncEngine:
             # Parse export
             conversations = self.parser.parse(export_path)
 
-            # Show if Ollama is available
+            # Show if Ollama is available (use ASCII-safe characters)
             if self.tag_generator.is_available():
-                print("[green]✓ Ollama detected - using AI tag generation[/green]")
+                print("* Ollama detected - using AI tag generation")
             else:
-                print(
-                    "[yellow]⚠ Ollama not running - using keyword extraction[/yellow]"
-                )
-                print(
-                    "[dim]Tip: Start Ollama with 'ollama serve' for automatic tagging[/dim]"
-                )
+                print("! Ollama not running - using keyword extraction")
+                print("  Tip: Start Ollama with 'ollama serve' for automatic tagging")
 
             for conv in conversations:
                 try:
@@ -56,16 +68,22 @@ class SyncEngine:
                     current_hash = conv.content_hash()
 
                     # Generate tags if missing or insufficient
+                    tag_result = None
                     if not conv.tags or len(conv.tags) < 2:
-                        conv.tags = self.tag_generator.generate_tags(conv)
+                        tag_result = self.tag_generator.generate_tags(
+                            conv,
+                            mode=self.tag_mode,
+                            use_hierarchy=self.use_hierarchy,
+                        )
+                        conv.tags = tag_result.all_tags()
 
-                    # Find related conversations based on tags [3]
+                    # Find related conversations based on tags
                     related_convs = self._find_related_by_tags(conv, conversations)
 
                     if not existing:
                         # New conversation
                         file_path = self._generate_path(conv)
-                        self.markdown_gen.save(conv, file_path)
+                        self.markdown_gen.save(conv, file_path, related_convs, tag_result)
                         self.state.save_conversation(
                             conv.id,
                             str(file_path.relative_to(self.vault_path)),
@@ -80,9 +98,9 @@ class SyncEngine:
 
                         # Check if file exists
                         if not file_path.exists():
-                            # File deleted - recreate it [3]
+                            # File deleted - recreate it
                             file_path = self._generate_path(conv)
-                            self.markdown_gen.save(conv, file_path, related_convs)
+                            self.markdown_gen.save(conv, file_path, related_convs, tag_result)
                             self.state.save_conversation(
                                 conv.id,
                                 str(file_path.relative_to(self.vault_path)),
@@ -90,11 +108,11 @@ class SyncEngine:
                                 {"title": conv.title},
                             )
                             results["recreated"] += 1
-                            print(f"[yellow]⚠ Recreated: {file_path.name}[/yellow]")
+                            print(f"! Recreated: {file_path.name}")
 
                         elif existing["content_hash"] != current_hash:
-                            # File exists but content changed [3]
-                            self.markdown_gen.save(conv, file_path, related_convs)
+                            # File exists but content changed
+                            self.markdown_gen.save(conv, file_path, related_convs, tag_result)
                             self.state.save_conversation(
                                 conv.id,
                                 str(file_path.relative_to(self.vault_path)),
@@ -176,7 +194,7 @@ class SyncEngine:
             other_tags = set(other_conv.tags)
             common_tags = conv_tags.intersection(other_tags)
 
-            # At least 2 common tags = related [3]
+            # At least 2 common tags = related
             if len(common_tags) >= 2:
                 related.append(
                     {
