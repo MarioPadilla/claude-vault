@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/MarioPadilla/claude-vault/compare/v0.3.0...v0.3.1) (2026-01-13)
+
+
+### Bug Fixes
+
+* Downgrade pre-commit to support Python 3.8 ([e538611](https://github.com/MarioPadilla/claude-vault/commit/e5386116553b41cf607b5bea65b506f110910353))
+* Resolve mypy type errors and update configuration ([796e4e5](https://github.com/MarioPadilla/claude-vault/commit/796e4e5ab922e59af83c6d33108971db50c00fdd))
+
 ## [0.3.0](https://github.com/MarioPadilla/claude-vault/compare/v0.2.0...v0.3.0) (2026-01-13)
 
 
