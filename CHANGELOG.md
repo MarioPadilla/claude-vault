@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/MarioPadilla/claude-vault/compare/v0.2.0...v0.3.0) (2026-01-13)
+
+
+### Features
+
+* Implement global config system and add CONTRIBUTING.md ([fd51864](https://github.com/MarioPadilla/claude-vault/commit/fd5186452ac0945b6fa476065679c23565834aac))
+
 ## [0.2.0](https://github.com/MarioPadilla/claude-vault/compare/v0.1.0...v0.2.0) (2025-12-29)
 
 
