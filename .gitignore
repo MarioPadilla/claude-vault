@@ -6,6 +6,9 @@ dist/
 # mypy
 .mypy_cache/
 
+# Pytest
+.pytest_cache/
+
 # IDE
 .vscode/
 

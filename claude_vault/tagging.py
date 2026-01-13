@@ -2,20 +2,23 @@ from typing import List
 
 import requests
 
+from .config import load_config
 from .models import Conversation
 
 
 class OfflineTagGenerator:
     """Generate tags using local Ollama LLM"""
 
-    def __init__(self, model: str = "llama3.2:3b"):
-        self.model = model
-        self.ollama_url = "http://localhost:11434/api/generate"
+    def __init__(self):
+        self.config = load_config()
+        self.ollama_url = self.config.ollama.url
 
     def is_available(self) -> bool:
         """Check if Ollama is running"""
         try:
-            response = requests.get("http://localhost:11434", timeout=2)
+            # Parse base URL
+            base_url = self.ollama_url.split("/api")[0]
+            response = requests.get(base_url, timeout=2)
             return response.status_code == 200
         except Exception:
             return False
@@ -65,24 +68,21 @@ class OfflineTagGenerator:
             response = requests.post(
                 self.ollama_url,
                 json={
-                    "model": self.model,
+                    "model": self.config.ollama.model,
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.3,  # Low temperature for consistency
-                        "num_predict": 60,  # Limit output length
+                        "temperature": self.config.ollama.temperature,
+                        "num_predict": 60,
                         "top_p": 0.9,
                     },
                 },
-                timeout=15,
+                timeout=self.config.ollama.timeout,
             )
 
             if response.status_code == 200:
-                tags_text = response.json()["response"].strip()
-
-                # Parse and clean tags
-                tags = self._parse_tags(tags_text)
-                return tags[:5]  # Limit to 5 tags
+                tags_text = response.json().get("response", "").strip()
+                return self._parse_tags(tags_text)[:5]
 
         except requests.exceptions.Timeout:
             print("⚠️  Ollama request timed out. Using fallback.")
@@ -131,6 +131,10 @@ class OfflineTagGenerator:
             "machine-learning": ["ml", "machine learning", "ai", "model"],
             "testing": ["test", "testing", "qa", "unit test"],
         }
+
+        # Merge with custom keywords from config
+        if self.config.custom_keywords:
+            keywords.update(self.config.custom_keywords)
 
         title_lower = conversation.title.lower()
         content_lower = (

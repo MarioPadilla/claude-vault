@@ -143,6 +143,24 @@ claude-vault verify --cleanup
 
 **"Not initialized:"** Run `claude-vault init` first
 
+## Configuration
+
+Claude Vault supports global configuration for Ollama settings and custom keywords.
+
+```bash
+# View current configuration
+claude-vault config
+```
+
+The config is stored in `~/.claude-vault/config.json`. You can customize:
+- **Ollama Model**: Change the model used for tagging (default: `llama3.2:3b`)
+- **Ollama URL**: Change the Ollama API endpoint
+- **Custom Keywords**: Add your own keywords for fallback tagging
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to set up the development environment and submit pull requests.
+
 ## License
 
 Claude Vault is available under a **dual-license model**:

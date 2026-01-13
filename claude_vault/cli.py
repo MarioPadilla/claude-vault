@@ -9,6 +9,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from .code_parser import ClaudeCodeHistoryParser
+from .config import get_config_path, load_config
 from .parser import ClaudeExportParser
 from .state import StateManager
 from .sync import SyncEngine
@@ -326,10 +327,14 @@ def retag(
     tag_gen = OfflineTagGenerator()
     parser = ClaudeExportParser()
 
+    # Check config
+    config = tag_gen.config
+    console.print(f"[dim]Using model: {config.ollama.model}[/dim]")
+
     if not tag_gen.is_available():
         console.print("[red]✗ Ollama not running[/red]")
         console.print("Start Ollama with: ollama serve")
-        console.print(f"Model needed: ollama pull {tag_gen.model}")
+        console.print(f"Model needed: ollama pull {config.ollama.model}")
         raise typer.Exit(1)
 
     conversations_dir = vault_path / "conversations"
@@ -362,6 +367,19 @@ def retag(
             console.print(f"✗ {md_file.name}: {e}")
 
     console.print(f"\n[green]Updated {updated} conversations[/green]")
+
+
+@app.command()
+def config():
+    """Manage Global Config for Claude Vault"""
+    config = load_config()
+    console.print(f"[blue]Configuration Path:[/blue] {get_config_path()}\n")
+
+    console.print("[green]Current Settings:[/green]")
+    console.print(json.dumps(config.model_dump(), indent=2))
+
+    if typer.confirm("Do you want to edit the configuration?"):
+        typer.launch(str(get_config_path()))
 
 
 if __name__ == "__main__":
