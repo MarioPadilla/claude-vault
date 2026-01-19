@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/MarioPadilla/claude-vault/compare/v0.3.1...v0.4.0) (2026-01-19)
+
+
+### Features
+
+* add AI summarization to conversations ([d195e40](https://github.com/MarioPadilla/claude-vault/commit/d195e40e6d2aecafe36cb6871cf73436315178cf))
+
+
+### Documentation
+
+* update README with AI summarization feature ([b8b5f53](https://github.com/MarioPadilla/claude-vault/commit/b8b5f53209d32ae1ba94b77b9dfb2eb0809e9774))
+
 ## [0.3.1](https://github.com/MarioPadilla/claude-vault/compare/v0.3.0...v0.3.1) (2026-01-13)
 
 
