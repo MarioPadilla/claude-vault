@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/MarioPadilla/claude-vault/compare/v0.4.0...v0.4.1) (2026-01-19)
+
+
+### Bug Fixes
+
+* Resolve mypy CI error by ignoring pytest internals ([6da6430](https://github.com/MarioPadilla/claude-vault/commit/6da6430cec1d008dcb53de0e8b9c6fea76d129f8))
+* Skip following imports for pytest in mypy config ([a5008cc](https://github.com/MarioPadilla/claude-vault/commit/a5008cc767044126fe0f071a4e79b6b46f2e0dc6))
+
 ## [0.4.0](https://github.com/MarioPadilla/claude-vault/compare/v0.3.1...v0.4.0) (2026-01-19)
 
 
