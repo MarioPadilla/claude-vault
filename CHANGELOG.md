@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/MarioPadilla/claude-vault/compare/v0.4.1...v0.4.2) (2026-01-29)
+
+
+### Documentation
+
+* fix markdown formatting in README ([e73bbc9](https://github.com/MarioPadilla/claude-vault/commit/e73bbc9995a030c465f468f27b19ac284642416f))
+
 ## [0.4.1](https://github.com/MarioPadilla/claude-vault/compare/v0.4.0...v0.4.1) (2026-01-19)
 
 
