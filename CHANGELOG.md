@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/MarioPadilla/claude-vault/compare/v0.4.2...v0.5.0) (2026-02-23)
+
+
+### Features
+
+* add watch mode and semantic search capabilities ([dff05f5](https://github.com/MarioPadilla/claude-vault/commit/dff05f59dc4fe308a840359ff5c818c5a5d0a290))
+
 ## [0.4.2](https://github.com/MarioPadilla/claude-vault/compare/v0.4.1...v0.4.2) (2026-01-29)
 
 
