@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/MarioPadilla/claude-vault/compare/v0.5.0...v0.6.0) (2026-02-24)
+
+
+### Features
+
+* add dry-run mode and progress indicators ([c29f01a](https://github.com/MarioPadilla/claude-vault/commit/c29f01af423c52f263b1ada1ab2994e75b8fae28))
+
 ## [0.5.0](https://github.com/MarioPadilla/claude-vault/compare/v0.4.2...v0.5.0) (2026-02-23)
 
 
