@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/MarioPadilla/claude-vault/compare/v0.6.0...v0.7.0) (2026-03-26)
+
+
+### Features
+
+* add PII and sensitive content detection ([555c856](https://github.com/MarioPadilla/claude-vault/commit/555c8564ca7d54b60780b82dd4f6307f5c75f676))
+
 ## [0.6.0](https://github.com/MarioPadilla/claude-vault/compare/v0.5.0...v0.6.0) (2026-02-24)
 
 
