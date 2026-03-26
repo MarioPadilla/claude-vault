@@ -93,11 +93,15 @@ class SyncEngine:
                     try:
                         current_hash = conv.content_hash()
                     except UnicodeDecodeError as e:
-                        print(f"Warning: Encoding issue in conversation '{conv.title[:50]}': {e}")
+                        print(
+                            f"Warning: Encoding issue in conversation '{conv.title[:50]}': {e}"
+                        )
                         # Try to sanitize and re-hash
                         for msg in conv.messages:
                             if isinstance(msg.content, bytes):
-                                msg.content = msg.content.decode("utf-8", errors="replace")
+                                msg.content = msg.content.decode(
+                                    "utf-8", errors="replace"
+                                )
                         current_hash = conv.content_hash()
 
                     # Generate tags/metadata if missing

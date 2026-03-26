@@ -88,9 +88,7 @@ def init(vault_path: Optional[Path] = None):
 def sync(
     export_path: Path = typer.Argument(None, help="Path to export file or database"),
     vault_path: Optional[Path] = None,
-    source: str = typer.Option(
-        "auto", help="Source type: auto, web, code, opencode"
-    ),
+    source: str = typer.Option("auto", help="Source type: auto, web, code, opencode"),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview changes without applying them"
     ),

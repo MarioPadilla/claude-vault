@@ -155,9 +155,7 @@ def test_db(tmp_path):
             "ses_test123",
             1700000200000,
             1700000200000,
-            json.dumps(
-                {"role": "assistant", "time": {"created": 1700000200000}}
-            ),
+            json.dumps({"role": "assistant", "time": {"created": 1700000200000}}),
         ),
     )
     conn.execute(
@@ -239,9 +237,7 @@ def test_db(tmp_path):
             "ses_test123",
             1700000195000,
             1700000195000,
-            json.dumps(
-                {"type": "reasoning", "text": "Let me think about this..."}
-            ),
+            json.dumps({"type": "reasoning", "text": "Let me think about this..."}),
         ),
     )
     # Step-start part (should be skipped)
@@ -338,9 +334,7 @@ def test_timestamps_converted(test_db):
 
     assert conv.created_at == datetime.fromtimestamp(1700000100000 / 1000)
     assert conv.updated_at == datetime.fromtimestamp(1700000300000 / 1000)
-    assert conv.messages[0].timestamp == datetime.fromtimestamp(
-        1700000110000 / 1000
-    )
+    assert conv.messages[0].timestamp == datetime.fromtimestamp(1700000110000 / 1000)
 
 
 def test_tags_include_opencode_session(test_db):
