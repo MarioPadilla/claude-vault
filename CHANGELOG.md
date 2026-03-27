@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/MarioPadilla/claude-vault/compare/v0.7.0...v0.8.0) (2026-03-27)
+
+
+### Features
+
+* add OpenCode SQLite database support ([#12](https://github.com/MarioPadilla/claude-vault/issues/12)) ([dd8ae73](https://github.com/MarioPadilla/claude-vault/commit/dd8ae73ef8f9776aa4517b1011a132ee84c78d71))
+
 ## [0.7.0](https://github.com/MarioPadilla/claude-vault/compare/v0.6.0...v0.7.0) (2026-03-26)
 
 
