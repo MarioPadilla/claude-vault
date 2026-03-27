@@ -34,7 +34,7 @@ ollama pull nomic-embed-text   # for semantic search
 ## Features
 
 - **Local-first** — everything stays on your machine, no external APIs required
-- **Two import formats** — Claude Web exports (`.json`) and Claude Code history (`.jsonl`) auto-detected
+- **Three import formats** — Claude Web exports (`.json`), Claude Code history (`.jsonl`), and OpenCode sessions (`.db`) auto-detected
 - **AI tagging & summarization** — local LLM (Ollama) generates tags and summaries; falls back to keyword extraction
 - **Semantic search** — find conversations by concept, not just exact words
 - **Smart relationship detection** — automatically links related conversations via shared tags
@@ -59,6 +59,12 @@ claude-vault sync ~/Downloads/conversations.json
 
 # Claude Code history
 claude-vault sync ~/.claude
+
+# OpenCode (auto-detected from .db extension)
+claude-vault sync ~/.local/share/opencode/opencode.db
+
+# OpenCode (uses default path)
+claude-vault sync --source opencode
 
 # Preview changes without writing
 claude-vault sync conversations.json --dry-run

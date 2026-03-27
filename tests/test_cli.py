@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -83,3 +84,48 @@ def test_sync_no_file():
     result = runner.invoke(app, ["sync", "nonexistent.json"])
     assert result.exit_code == 1
     assert "Export file not found" in result.stdout
+
+
+def test_sync_opencode_source_no_path(tmp_path):
+    """Test sync with --source opencode resolves default DB path"""
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+        result = runner.invoke(app, ["sync", "--source", "opencode"])
+        # Default path does not exist in CI; expect a file-not-found error
+        assert result.exit_code == 1
+        assert "opencode.db" in result.stdout
+
+
+def test_sync_auto_detects_db_file(tmp_path):
+    """Test that .db files are auto-detected as opencode source"""
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+        # Create a valid but empty OpenCode SQLite database
+        fake_db = tmp_path / "opencode.db"
+        conn = sqlite3.connect(str(fake_db))
+        conn.executescript("""
+            CREATE TABLE session (
+                id text PRIMARY KEY, project_id text NOT NULL, parent_id text,
+                slug text NOT NULL, directory text NOT NULL, title text NOT NULL,
+                version text NOT NULL, share_url text, summary_additions integer,
+                summary_deletions integer, summary_files integer, summary_diffs text,
+                revert text, permission text, time_created integer NOT NULL,
+                time_updated integer NOT NULL, time_compacting integer,
+                time_archived integer, workspace_id text
+            );
+            CREATE TABLE message (
+                id text PRIMARY KEY, session_id text NOT NULL,
+                time_created integer NOT NULL, time_updated integer NOT NULL,
+                data text NOT NULL
+            );
+            CREATE TABLE part (
+                id text PRIMARY KEY, message_id text NOT NULL, session_id text NOT NULL,
+                time_created integer NOT NULL, time_updated integer NOT NULL,
+                data text NOT NULL
+            );
+        """)
+        conn.close()
+        result = runner.invoke(app, ["sync", str(fake_db), "--dry-run"])
+        # Should detect as opencode, parse 0 sessions, and exit cleanly
+        assert result.exit_code == 0
+        assert result.output  # progress/result table was printed

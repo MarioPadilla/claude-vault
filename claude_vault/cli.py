@@ -10,6 +10,7 @@ from rich.table import Table
 
 from .code_parser import ClaudeCodeHistoryParser
 from .config import get_config_path, load_config
+from .opencode_parser import OpenCodeParser
 from .parser import ClaudeExportParser
 from .semantic_search import SemanticSearchEngine
 from .state import StateManager
@@ -85,9 +86,9 @@ def init(vault_path: Optional[Path] = None):
 
 @app.command()
 def sync(
-    export_path: Path,
+    export_path: Path = typer.Argument(None, help="Path to export file or database"),
     vault_path: Optional[Path] = None,
-    source: str = typer.Option("auto", help="Source type: auto, web, code"),
+    source: str = typer.Option("auto", help="Source type: auto, web, code, opencode"),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Preview changes without applying them"
     ),
@@ -110,6 +111,17 @@ def sync(
     """Sync Claude conversations to markdown files"""
 
     vault_path = vault_path or Path.cwd()
+
+    # Resolve default path for opencode source
+    if source == "opencode" and export_path is None:
+        export_path = OpenCodeParser.DEFAULT_DB_PATH
+
+    if export_path is None:
+        console.print(
+            "[red]✗ Error: No export path provided. Use: claude-vault sync <path>[/red]"
+        )
+        raise typer.Exit(1)
+
     if not export_path.exists():
         console.print(f"[red]✗ Error: Export file not found: {export_path}[/red]")
         raise typer.Exit(1)
@@ -126,6 +138,8 @@ def sync(
             source = "code"
         elif export_path.suffix == ".jsonl":
             source = "code"
+        elif export_path.suffix == ".db" or export_path.name == "opencode.db":
+            source = "opencode"
         else:
             source = "web"
 
@@ -139,9 +153,11 @@ def sync(
         )
 
     # Use appropriate parser
-    parser: Union[ClaudeCodeHistoryParser, ClaudeExportParser]
+    parser: Union[ClaudeCodeHistoryParser, ClaudeExportParser, OpenCodeParser]
     if source == "code":
         parser = ClaudeCodeHistoryParser()
+    elif source == "opencode":
+        parser = OpenCodeParser()
     else:
         parser = ClaudeExportParser()
 
@@ -713,7 +729,7 @@ def watch(vault_path: Optional[Path] = None):
 @app.command()
 def watch_add(
     path: Path = typer.Argument(..., help="Path to watch"),
-    source: str = typer.Option("auto", help="Source type: auto, web, or code"),
+    source: str = typer.Option("auto", help="Source type: auto, web, code, opencode"),
     vault_path: Optional[Path] = None,
 ):
     """Add a path to watch list"""
@@ -734,6 +750,8 @@ def watch_add(
             source = "web"
         elif path.suffix == ".jsonl" or ".claude" in str(path):
             source = "code"
+        elif path.suffix == ".db" or path.name == "opencode.db":
+            source = "opencode"
         else:
             source = "web"  # Default
 

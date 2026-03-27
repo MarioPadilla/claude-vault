@@ -7,6 +7,7 @@ import frontmatter
 from .code_parser import ClaudeCodeHistoryParser
 from .markdown import MarkdownGenerator
 from .models import Conversation
+from .opencode_parser import OpenCodeParser
 from .parser import ClaudeExportParser
 from .pii import PIIDetector
 from .state import StateManager
@@ -22,9 +23,9 @@ class SyncEngine:
     def __init__(self, vault_path: Path):
         self.vault_path = vault_path
         self.state = StateManager(vault_path)
-        self.parser: Union[ClaudeExportParser, ClaudeCodeHistoryParser] = (
-            ClaudeExportParser()
-        )
+        self.parser: Union[
+            ClaudeExportParser, ClaudeCodeHistoryParser, OpenCodeParser
+        ] = ClaudeExportParser()
         self.markdown_gen = MarkdownGenerator()
         self.conversations_dir = vault_path / "conversations"
         self.conversations_dir.mkdir(exist_ok=True)
@@ -87,7 +88,21 @@ class SyncEngine:
                         progress_callback(conv.title[:50], idx, total)
 
                     existing = self.state.get_conversation(conv.id)
-                    current_hash = conv.content_hash()
+
+                    # Generate content hash with encoding safety
+                    try:
+                        current_hash = conv.content_hash()
+                    except UnicodeDecodeError as e:
+                        print(
+                            f"Warning: Encoding issue in conversation '{conv.title[:50]}': {e}"
+                        )
+                        # Try to sanitize and re-hash
+                        for msg in conv.messages:
+                            if isinstance(msg.content, bytes):
+                                msg.content = msg.content.decode(
+                                    "utf-8", errors="replace"
+                                )
+                        current_hash = conv.content_hash()
 
                     # Generate tags/metadata if missing
                     if not conv.tags or len(conv.tags) < 2:
