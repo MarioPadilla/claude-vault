@@ -104,7 +104,25 @@ class SyncEngine:
                                 )
                         current_hash = conv.content_hash()
 
-                    # Generate tags/metadata if missing
+                    # Preserve existing tags from the markdown file.
+                    # The parser only does title-keyword extraction, so
+                    # conv.tags is usually empty even when a prior sync or
+                    # retag already wrote AI-generated tags to the file.
+                    # Without this check, every sync cycle re-invokes
+                    # Ollama for conversations whose titles don't match
+                    # the keyword list.
+                    if (not conv.tags or len(conv.tags) < 2) and existing:
+                        md_path = self.vault_path / existing["file_path"]
+                        if md_path.exists():
+                            saved = frontmatter.load(md_path)
+                            saved_tags = saved.get("tags", [])
+                            saved_summary = saved.get("summary", "")
+                            if saved_tags and len(saved_tags) >= 2:
+                                conv.tags = saved_tags
+                                if saved_summary:
+                                    conv.summary = saved_summary
+
+                    # Generate tags/metadata if still missing
                     if not conv.tags or len(conv.tags) < 2:
                         metadata = self.tag_generator.generate_metadata(conv)
                         conv.tags = metadata["tags"]
