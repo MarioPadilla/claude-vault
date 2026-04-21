@@ -129,3 +129,30 @@ def test_sync_auto_detects_db_file(tmp_path):
         # Should detect as opencode, parse 0 sessions, and exit cleanly
         assert result.exit_code == 0
         assert result.output  # progress/result table was printed
+
+
+def test_sync_auto_detects_projects_subdir(tmp_path):
+    """A renamed .claude directory is auto-detected when it contains projects/<hash>/*.jsonl.
+
+    Covers the common case of syncing from a copy of ~/.claude that lives
+    in a differently-named directory (e.g. after copying from another
+    machine).
+    """
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+        source_dir = Path("claude-remote")
+        (source_dir / "projects" / "abc123").mkdir(parents=True)
+        (source_dir / "projects" / "abc123" / "session.jsonl").touch()
+        result = runner.invoke(app, ["sync", str(source_dir), "--dry-run"])
+        assert result.exit_code == 0
+
+
+def test_sync_auto_detects_loose_jsonl_dir(tmp_path):
+    """A directory containing .jsonl files is auto-detected as code source."""
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+        source_dir = Path("claude-jsonl-dump")
+        source_dir.mkdir()
+        (source_dir / "session1.jsonl").touch()
+        result = runner.invoke(app, ["sync", str(source_dir), "--dry-run"])
+        assert result.exit_code == 0

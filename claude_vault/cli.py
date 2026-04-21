@@ -134,7 +134,11 @@ def sync(
 
     # Detect format
     if source == "auto":
-        if export_path.is_dir() and export_path.name == ".claude":
+        if export_path.is_dir() and (
+            export_path.name == ".claude"
+            or any(export_path.glob("projects/*/*.jsonl"))
+            or any(export_path.glob("*.jsonl"))
+        ):
             source = "code"
         elif export_path.suffix == ".jsonl":
             source = "code"
