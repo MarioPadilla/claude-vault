@@ -134,8 +134,8 @@ class SemanticSearchEngine:
             file_path = Path(data["file_path"])
             if file_path.exists():
                 post = frontmatter.load(file_path)
-                title = post.get("title", file_path.stem)
-                tags = post.get("tags", [])
+                title = str(post.get("title", file_path.stem))
+                tags = list(post.get("tags", []))
             else:
                 title = conv_id
                 tags = []
@@ -249,10 +249,10 @@ class SemanticSearchEngine:
             id=uuid,
             title=title,
             messages=messages,
-            created_at=post.get("date"),
-            updated_at=post.get("updated", post.get("date")),
-            tags=post.get("tags", []),
-            summary=post.get("summary"),
+            created_at=post.get("date"),  # type: ignore[arg-type]
+            updated_at=post.get("updated", post.get("date")),  # type: ignore[arg-type]
+            tags=list(post.get("tags", [])),
+            summary=post.get("summary") or None,  # type: ignore[arg-type]
         )
 
         # Chunk conversation
