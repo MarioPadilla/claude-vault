@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/MarioPadilla/claude-vault/compare/v0.8.0...v0.8.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* cast frontmatter .get() return values to satisfy newer mypy ([#17](https://github.com/MarioPadilla/claude-vault/issues/17)) ([5ecc2b9](https://github.com/MarioPadilla/claude-vault/commit/5ecc2b9efaaeb5285778c092cbcb0ece5e836e2b))
+
 ## [0.8.0](https://github.com/MarioPadilla/claude-vault/compare/v0.7.0...v0.8.0) (2026-03-27)
 
 
