@@ -3,7 +3,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List
+from typing import Any, DefaultDict, Dict, List, cast
 
 import frontmatter
 import numpy as np
@@ -134,8 +134,8 @@ class SemanticSearchEngine:
             file_path = Path(data["file_path"])
             if file_path.exists():
                 post = frontmatter.load(file_path)
-                title = str(post.get("title", file_path.stem))
-                tags = list(post.get("tags", []))
+                title = cast(str, post.get("title", file_path.stem))
+                tags = cast(List[str], post.get("tags", []))
             else:
                 title = conv_id
                 tags = []
@@ -204,7 +204,7 @@ class SemanticSearchEngine:
         from claude_vault.models import Conversation, Message
 
         # Build conversation object
-        title = post.get("title", "")
+        title = cast(str, post.get("title", ""))
         content = post.content
 
         # Parse messages from markdown
@@ -251,7 +251,7 @@ class SemanticSearchEngine:
             messages=messages,
             created_at=post.get("date"),  # type: ignore[arg-type]
             updated_at=post.get("updated", post.get("date")),  # type: ignore[arg-type]
-            tags=list(post.get("tags", [])),
+            tags=cast(List[str], post.get("tags", [])),
             summary=post.get("summary") or None,  # type: ignore[arg-type]
         )
 

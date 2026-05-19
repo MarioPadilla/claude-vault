@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 import frontmatter
 import typer
@@ -483,7 +483,7 @@ def search(
                 or keyword.lower() in str(post.get("title", "")).lower()
             ):
                 # Optional tag filtering
-                if tag and tag not in list(post.get("tags", [])):
+                if tag and tag not in cast(List[str], post.get("tags", [])):
                     continue
 
                 # Find matches with context
@@ -591,7 +591,11 @@ def retag(
         try:
             post = frontmatter.load(md_file)
             # Skip if has good tags and not forcing
-            if not force and post.get("tags") and len(list(post.get("tags", []))) >= 3:
+            if (
+                not force
+                and post.get("tags")
+                and len(cast(List[str], post.get("tags", []))) >= 3
+            ):
                 continue
             files_to_process.append((md_file, post))
         except Exception:
