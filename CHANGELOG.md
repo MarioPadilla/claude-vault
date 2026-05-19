@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/MarioPadilla/claude-vault/compare/v0.8.1...v0.8.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* auto-detect code source from directories with non-standard names ([#16](https://github.com/MarioPadilla/claude-vault/issues/16)) ([c1b49ac](https://github.com/MarioPadilla/claude-vault/commit/c1b49ac5c32ada202a6f6142bb23354c9cc98569))
+
 ## [0.8.1](https://github.com/MarioPadilla/claude-vault/compare/v0.8.0...v0.8.1) (2026-05-19)
 
 
