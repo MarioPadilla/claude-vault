@@ -22,10 +22,11 @@ class ClaudeCodeHistoryParser:
         conversations = []
 
         if claude_path.is_file() and claude_path.suffix == ".jsonl":
-            # Parse single JSONL file
-            conv = self._parse_session_file(claude_path)
-            if conv:
-                conversations.append(conv)
+            # Parse single JSONL file (skip internal files even when passed directly)
+            if not self._is_internal_jsonl(claude_path):
+                conv = self._parse_session_file(claude_path)
+                if conv:
+                    conversations.append(conv)
         elif claude_path.is_dir():
             # Parse entire .claude directory
             if claude_path.name == ".claude":
@@ -33,6 +34,8 @@ class ClaudeCodeHistoryParser:
                 projects_dir = claude_path / "projects"
                 if projects_dir.exists():
                     for jsonl_file in projects_dir.rglob("*.jsonl"):
+                        if self._is_internal_jsonl(jsonl_file):
+                            continue
                         try:
                             conv = self._parse_session_file(jsonl_file)
                             if conv:
@@ -42,15 +45,39 @@ class ClaudeCodeHistoryParser:
             else:
                 # Regular directory, look for .jsonl files
                 for jsonl_file in claude_path.rglob("*.jsonl"):
-                    if jsonl_file.name != "history.jsonl":
-                        try:
-                            conv = self._parse_session_file(jsonl_file)
-                            if conv:
-                                conversations.append(conv)
-                        except Exception as e:
-                            print(f"Warning: Failed to parse {jsonl_file.name}: {e}")
+                    if self._is_internal_jsonl(jsonl_file):
+                        continue
+                    try:
+                        conv = self._parse_session_file(jsonl_file)
+                        if conv:
+                            conversations.append(conv)
+                    except Exception as e:
+                        print(f"Warning: Failed to parse {jsonl_file.name}: {e}")
 
         return conversations
+
+    @staticmethod
+    def _is_internal_jsonl(jsonl_path: Path) -> bool:
+        """Skip JSONL files that are not standalone conversations.
+
+        Claude Code writes one JSONL per Task-tool subagent invocation
+        (filename pattern ``agent-<hash>.jsonl``) and stamps each one with
+        the *parent* session's ``sessionId``. Treating them as separate
+        conversations causes UUID collisions: many parsed Conversations
+        share one DB row, the markdown gets clobbered nondeterministically,
+        and every re-sync re-tags the same logical conversation N times
+        because each subagent file produces a different content hash.
+
+        The dispatch prompt and final result of every subagent are already
+        captured in the parent session's transcript (as the Task tool call
+        and its tool_result), so skipping these files preserves the data
+        users actually search for and removes the duplication.
+
+        Also skips ``history.jsonl``, which is a top-level Claude prompt
+        history index, not a session.
+        """
+        name = jsonl_path.name
+        return name == "history.jsonl" or name.startswith("agent-")
 
     def _parse_session_file(self, jsonl_path: Path) -> Optional[Conversation]:
         """Parse a single session JSONL file"""
