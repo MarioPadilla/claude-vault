@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -126,7 +126,7 @@ class ClaudeCodeHistoryParser:
 
         # Default timestamps
         if not created_at:
-            created_at = datetime.now()
+            created_at = datetime.now(timezone.utc)
         if not updated_at:
             updated_at = created_at
 
@@ -196,23 +196,30 @@ class ClaudeCodeHistoryParser:
         return "\n\n".join(content_parts)
 
     def _parse_timestamp(self, timestamp) -> datetime:
-        """Parse timestamp - handles both ISO string and milliseconds"""
+        """Parse timestamp - handles both ISO string and milliseconds.
+
+        Always returns timezone-aware (UTC) to avoid naive/aware
+        comparison errors when JSONL files mix timestamp formats.
+        """
         if not timestamp:
-            return datetime.now()
+            return datetime.now(timezone.utc)
 
         try:
             # Handle milliseconds timestamp (like 1767000268465)
             if isinstance(timestamp, (int, float)):
-                return datetime.fromtimestamp(timestamp / 1000)
+                return datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)
 
             # Handle ISO string
             if isinstance(timestamp, str):
-                return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
 
         except Exception as e:
             print(f"Warning: Could not parse timestamp {timestamp}: {e}")
 
-        return datetime.now()
+        return datetime.now(timezone.utc)
 
     def _generate_title(
         self, messages: List[Message], project_path: Optional[str] = None

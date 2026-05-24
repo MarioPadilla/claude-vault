@@ -1,7 +1,7 @@
 import json
 import re
 import uuid as uuid_module
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -98,14 +98,14 @@ class ClaudeExportParser:
     def _parse_timestamp(self, timestamp_str: Optional[str]) -> datetime:
         """Parse ISO format timestamp from Claude export"""
         if not timestamp_str:
-            return datetime.now()
+            return datetime.now(timezone.utc)
 
         try:
             # Claude uses ISO format with Z suffix
             return datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
         except Exception as e:
             print(f"Warning: Could not parse timestamp {timestamp_str}: {e}")
-            return datetime.now()
+            return datetime.now(timezone.utc)
 
     def _extract_tags(self, title: str) -> List[str]:
         """
