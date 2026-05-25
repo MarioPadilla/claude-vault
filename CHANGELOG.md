@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/MarioPadilla/claude-vault/compare/v0.8.2...v0.8.3) (2026-05-25)
+
+
+### Bug Fixes
+
+* **parser:** skip subagent and history JSONL files ([#20](https://github.com/MarioPadilla/claude-vault/issues/20)) ([a787fa1](https://github.com/MarioPadilla/claude-vault/commit/a787fa192a4920292a18995e78b368b0fecd897a))
+
 ## [0.8.2](https://github.com/MarioPadilla/claude-vault/compare/v0.8.1...v0.8.2) (2026-05-19)
 
 
