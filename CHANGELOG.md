@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.4](https://github.com/MarioPadilla/claude-vault/compare/v0.8.3...v0.8.4) (2026-05-27)
+
+
+### Bug Fixes
+
+* **deps:** pin typer below 0.26.0 to preserve isolated_filesystem ([#26](https://github.com/MarioPadilla/claude-vault/issues/26)) ([dbc41d4](https://github.com/MarioPadilla/claude-vault/commit/dbc41d4b31cdb87b27d0d1a946fe2eeca87a08a0))
+* **parser:** normalize all timestamps to UTC-aware datetimes ([#24](https://github.com/MarioPadilla/claude-vault/issues/24)) ([e7fa6a8](https://github.com/MarioPadilla/claude-vault/commit/e7fa6a8538f6bda3e8b56436cc0005d213767a08)), closes [#21](https://github.com/MarioPadilla/claude-vault/issues/21)
+
 ## [0.8.3](https://github.com/MarioPadilla/claude-vault/compare/v0.8.2...v0.8.3) (2026-05-25)
 
 
