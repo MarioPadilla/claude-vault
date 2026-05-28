@@ -13,7 +13,10 @@ from rich.console import Console
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from claude_vault.code_parser import ClaudeCodeHistoryParser
 from claude_vault.config import load_config
+from claude_vault.opencode_parser import OpenCodeParser
+from claude_vault.parser import ClaudeExportParser
 from claude_vault.state import StateManager
 from claude_vault.sync import SyncEngine
 
@@ -188,6 +191,7 @@ class WatchManager:
         self.running = False
         self.error_counts: DefaultDict[str, int] = defaultdict(int)
         self.pid_file = vault_path / ".claude-vault" / "watch.pid"
+        self._path_sources: Dict[str, str] = {}
 
     def start(self):
         """Start watching configured paths"""
@@ -206,6 +210,10 @@ class WatchManager:
                 "[yellow]⚠ No watch paths configured. Use 'claude-vault watch-add' to add paths.[/yellow]"
             )
             return
+
+        self._path_sources = {
+            str(Path(wp["path"]).expanduser()): wp["source_type"] for wp in watch_paths
+        }
 
         # Start watching each path
         event_handler = ClaudeVaultEventHandler(self._handle_sync)
@@ -276,6 +284,14 @@ class WatchManager:
 
         console.print("[green]✓ Stopped gracefully[/green]")
 
+    def _resolve_source_type(self, file_path: Path) -> str:
+        """Return the source_type for a changed file by matching against watched paths."""
+        file_str = str(file_path)
+        for watched, source_type in self._path_sources.items():
+            if file_str == watched or file_str.startswith(watched + "/"):
+                return source_type
+        return "web"
+
     def _handle_sync(self, file_path: Path):
         """Handle sync for a file"""
         self.sync_queue.schedule_sync(file_path, self._execute_sync)
@@ -283,7 +299,14 @@ class WatchManager:
     def _execute_sync(self, file_path: Path):
         """Execute sync with error handling"""
         try:
-            # Execute sync
+            source_type = self._resolve_source_type(file_path)
+            if source_type == "code":
+                self.sync_engine.parser = ClaudeCodeHistoryParser()
+            elif source_type == "opencode":
+                self.sync_engine.parser = OpenCodeParser()
+            else:
+                self.sync_engine.parser = ClaudeExportParser()
+
             results = self.sync_engine.sync(file_path)
 
             # Update statistics
