@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.5](https://github.com/MarioPadilla/claude-vault/compare/v0.8.4...v0.8.5) (2026-05-28)
+
+
+### Bug Fixes
+
+* **watcher:** route syncs to the correct parser based on source type ([#27](https://github.com/MarioPadilla/claude-vault/issues/27)) ([712177e](https://github.com/MarioPadilla/claude-vault/commit/712177efb8b6c8c249f8718792d6b5294c45fc7e))
+
 ## [0.8.4](https://github.com/MarioPadilla/claude-vault/compare/v0.8.3...v0.8.4) (2026-05-27)
 
 
