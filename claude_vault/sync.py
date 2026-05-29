@@ -104,6 +104,30 @@ class SyncEngine:
                                 )
                         current_hash = conv.content_hash()
 
+                    # Fast path: if the conversation is already tracked with
+                    # the same content hash, the markdown file still exists
+                    # on disk, and no PII flag is in play, skip metadata
+                    # generation and related-conversation computation — the
+                    # conversation is unchanged and there is nothing to do.
+                    # Source exports never carry tags, so without this early
+                    # exit every re-sync repays the LLM cost only to discard
+                    # the result.
+                    #
+                    # PII flags (--detect-pii / --redact-pii / --skip-sensitive)
+                    # force the full flow even for unchanged content, because
+                    # the user is explicitly asking to apply analysis that
+                    # may retrofit tags, redact text, or skip the conversation
+                    # regardless of whether the source changed.
+                    if (
+                        not (detect_pii or redact_pii or skip_sensitive)
+                        and existing
+                        and existing.get("content_hash") == current_hash
+                    ):
+                        existing_path = self.vault_path / existing["file_path"]
+                        if existing_path.exists():
+                            results["unchanged"] += 1
+                            continue
+
                     # Generate tags/metadata if missing
                     if not conv.tags or len(conv.tags) < 2:
                         metadata = self.tag_generator.generate_metadata(conv)
@@ -214,8 +238,12 @@ class SyncEngine:
                                 }
                             )
 
-                        elif existing["content_hash"] != current_hash:
-                            # File exists but content changed [3]
+                        else:
+                            # File exists. Either the hash differs (real
+                            # content change) or a PII flag bypassed the fast
+                            # path and the user wants analysis applied even
+                            # though the source is unchanged. Either way we
+                            # rewrite the markdown with the current metadata.
                             action = "updated"
                             results["updated"] += 1
 
@@ -237,10 +265,6 @@ class SyncEngine:
                                     ),
                                 }
                             )
-
-                        else:
-                            # File exists and unchanged
-                            results["unchanged"] += 1
 
                 except Exception as e:
                     print(f"Error processing conversation {conv.title}: {e}")
