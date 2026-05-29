@@ -91,3 +91,52 @@ def test_sync_with_detect_pii_bypasses_fast_path_on_unchanged(tmp_path):
                 second = engine.sync(export_file, detect_pii=True)
                 assert mock_analyze.call_count == 1
                 assert second["unchanged"] == 0
+
+
+def test_sync_reruns_llm_when_content_changed(tmp_path):
+    """Changed content must re-run the LLM and count as "updated".
+
+    The fast path only skips when the content hash matches. When the same
+    conversation (same id) comes back with different message content, the
+    hash differs, so the skip must NOT fire: the LLM re-runs and the result
+    is an update, never a skip. This guards the branch the fast path
+    refactored from elif/else into a single else.
+    """
+    export_file = tmp_path / "conversations.json"
+    export_file.write_text("[]")
+    (tmp_path / ".claude-vault").mkdir()
+    (tmp_path / "conversations").mkdir()
+
+    engine = SyncEngine(tmp_path)
+
+    with patch.object(
+        engine.tag_generator,
+        "generate_metadata",
+        return_value={"tags": ["t1", "t2"], "summary": "s"},
+    ) as mock_meta:
+        # First sync: original content.
+        with patch.object(
+            engine.parser,
+            "parse",
+            side_effect=lambda *_a, **_k: [
+                _make_conv("Original content", uuid="conv-mutates-001")
+            ],
+        ):
+            first = engine.sync(export_file)
+            assert first["new"] == 1
+            assert mock_meta.call_count == 1
+
+        # Second sync: same id, different content -> hash changes.
+        with patch.object(
+            engine.parser,
+            "parse",
+            side_effect=lambda *_a, **_k: [
+                _make_conv("Edited content", uuid="conv-mutates-001")
+            ],
+        ):
+            second = engine.sync(export_file)
+            assert second["updated"] == 1
+            assert second["unchanged"] == 0
+            assert second["new"] == 0
+            # LLM re-runs because the content hash no longer matches.
+            assert mock_meta.call_count == 2
