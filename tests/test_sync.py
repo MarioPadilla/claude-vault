@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import patch
 
 from claude_vault.models import Conversation, Message
+from claude_vault.pii import PIIScanResult
 from claude_vault.sync import SyncEngine
 
 
@@ -50,3 +51,43 @@ def test_sync_skips_llm_when_content_unchanged(tmp_path):
             assert second["updated"] == 0
             # Key assertion: LLM NOT called again on the unchanged re-run.
             assert mock_meta.call_count == 1
+
+
+def test_sync_with_detect_pii_bypasses_fast_path_on_unchanged(tmp_path):
+    """--detect-pii must run analysis even on unchanged conversations.
+
+    If a user first syncs without PII flags and later re-runs
+    `sync --detect-pii`, unchanged conversations should be analysed so
+    PII tags can be retrofitted into the markdown. The fast-path skip
+    is only safe when none of the PII flags are in play.
+    """
+    export_file = tmp_path / "conversations.json"
+    export_file.write_text("[]")
+    (tmp_path / ".claude-vault").mkdir()
+    (tmp_path / "conversations").mkdir()
+
+    def fresh_convs(*_args, **_kwargs):
+        return [_make_conv("email alice@example.com", uuid="conv-pii-001", title="Pii")]
+
+    engine = SyncEngine(tmp_path)
+    clean_result = PIIScanResult(detected=False, risk_level="none")
+
+    with patch.object(engine.parser, "parse", side_effect=fresh_convs):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=clean_result
+            ) as mock_analyze:
+                # First sync: plain, no PII flags. Writes state, no analyze.
+                first = engine.sync(export_file)
+                assert first["new"] == 1
+                assert mock_analyze.call_count == 0
+
+                # Second sync with --detect-pii: must analyse even though
+                # content hash matches.
+                second = engine.sync(export_file, detect_pii=True)
+                assert mock_analyze.call_count == 1
+                assert second["unchanged"] == 0
