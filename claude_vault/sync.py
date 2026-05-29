@@ -104,6 +104,18 @@ class SyncEngine:
                                 )
                         current_hash = conv.content_hash()
 
+                    # Fast path: if the conversation is already synced with the
+                    # same content hash and the markdown file still exists on
+                    # disk, skip LLM tagging, PII analysis, and markdown regen
+                    # entirely — there is nothing to do. Source exports never
+                    # carry tags, so without this early exit every re-sync
+                    # repays the LLM cost only to throw the result away.
+                    if existing and existing.get("content_hash") == current_hash:
+                        existing_path = self.vault_path / existing["file_path"]
+                        if existing_path.exists():
+                            results["unchanged"] += 1
+                            continue
+
                     # Generate tags/metadata if missing
                     if not conv.tags or len(conv.tags) < 2:
                         metadata = self.tag_generator.generate_metadata(conv)
@@ -214,8 +226,11 @@ class SyncEngine:
                                 }
                             )
 
-                        elif existing["content_hash"] != current_hash:
-                            # File exists but content changed [3]
+                        else:
+                            # File exists but content changed — the "unchanged"
+                            # branch is handled by the fast path at the top of
+                            # the loop, so reaching here implies the hash
+                            # differs.
                             action = "updated"
                             results["updated"] += 1
 
@@ -237,10 +252,6 @@ class SyncEngine:
                                     ),
                                 }
                             )
-
-                        else:
-                            # File exists and unchanged
-                            results["unchanged"] += 1
 
                 except Exception as e:
                     print(f"Error processing conversation {conv.title}: {e}")
