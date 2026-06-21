@@ -104,20 +104,10 @@ class SyncEngine:
                                 )
                         current_hash = conv.content_hash()
 
-                    # Fast path: if the conversation is already tracked with
-                    # the same content hash, the markdown file still exists
-                    # on disk, and no PII flag is in play, skip metadata
-                    # generation and related-conversation computation — the
-                    # conversation is unchanged and there is nothing to do.
-                    # Source exports never carry tags, so without this early
-                    # exit every re-sync repays the LLM cost only to discard
-                    # the result.
-                    #
-                    # PII flags (--detect-pii / --redact-pii / --skip-sensitive)
-                    # force the full flow even for unchanged content, because
-                    # the user is explicitly asking to apply analysis that
-                    # may retrofit tags, redact text, or skip the conversation
-                    # regardless of whether the source changed.
+                    # Fast path: skip an unchanged conversation that's already on
+                    # disk. Source exports carry no tags, so the len(conv.tags) < 2
+                    # check below would otherwise re-run the LLM every sync only to
+                    # discard the result. PII flags still take the full path.
                     if (
                         not (detect_pii or redact_pii or skip_sensitive)
                         and existing
