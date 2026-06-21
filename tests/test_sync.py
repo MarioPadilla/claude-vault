@@ -87,10 +87,13 @@ def test_sync_with_detect_pii_bypasses_fast_path_on_unchanged(tmp_path):
                 assert mock_analyze.call_count == 0
 
                 # Second sync with --detect-pii: must analyse even though
-                # content hash matches.
+                # the content hash matches, and the run must count as
+                # "reanalyzed" (not "updated") since the source is unchanged.
                 second = engine.sync(export_file, detect_pii=True)
                 assert mock_analyze.call_count == 1
                 assert second["unchanged"] == 0
+                assert second["reanalyzed"] == 1
+                assert second["updated"] == 0
 
 
 def test_sync_reruns_llm_when_content_changed(tmp_path):
@@ -138,5 +141,53 @@ def test_sync_reruns_llm_when_content_changed(tmp_path):
             assert second["updated"] == 1
             assert second["unchanged"] == 0
             assert second["new"] == 0
+            assert second["reanalyzed"] == 0
             # LLM re-runs because the content hash no longer matches.
             assert mock_meta.call_count == 2
+
+
+def test_sync_redact_pii_keeps_content_hash_stable(tmp_path):
+    """--redact-pii must not poison the stored content hash.
+
+    The hash is computed over the source content before redaction runs, and
+    the parser yields a fresh conversation from the raw export each sync, so
+    a later plain sync still sees the conversation as unchanged — no
+    oscillation between reanalyzed/updated/unchanged across runs.
+    """
+    export_file = tmp_path / "conversations.json"
+    export_file.write_text("[]")
+    (tmp_path / ".claude-vault").mkdir()
+    (tmp_path / "conversations").mkdir()
+
+    def fresh_convs(*_args, **_kwargs):
+        return [_make_conv("email alice@example.com", uuid="conv-redact-001")]
+
+    engine = SyncEngine(tmp_path)
+    detected = PIIScanResult(detected=True, risk_level="low", pii_types=["email"])
+
+    with patch.object(engine.parser, "parse", side_effect=fresh_convs):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(engine.pii_detector, "analyze", return_value=detected):
+                with patch.object(
+                    engine.pii_detector, "redact", side_effect=lambda text: "[REDACTED]"
+                ) as mock_redact:
+                    # Plain first sync stores the source content hash.
+                    assert engine.sync(export_file)["new"] == 1
+
+                    # --redact-pii rewrites the markdown for unchanged source,
+                    # counted as reanalyzed (not updated).
+                    second = engine.sync(export_file, redact_pii=True)
+                    assert mock_redact.call_count == 1
+                    assert second["reanalyzed"] == 1
+                    assert second["updated"] == 0
+
+                    # A later plain sync still sees it as unchanged: redaction
+                    # never touched the stored source hash.
+                    third = engine.sync(export_file)
+                    assert third["unchanged"] == 1
+                    assert third["reanalyzed"] == 0
+                    assert third["updated"] == 0

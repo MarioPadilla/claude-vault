@@ -220,6 +220,8 @@ def sync(
     table.add_row("Updated", f"[yellow]{result['updated']}[/yellow]")
     table.add_row("Recreated", f"[yellow]{result['recreated']}[/yellow]")
     table.add_row("Unchanged", f"[dim]{result['unchanged']}[/dim]")
+    if result.get("reanalyzed", 0) > 0:
+        table.add_row("Re-analyzed (PII)", f"[yellow]{result['reanalyzed']}[/yellow]")
     if result.get("skipped", 0) > 0:
         table.add_row("Skipped (sensitive)", f"[magenta]{result['skipped']}[/magenta]")
     if result["errors"] > 0:
@@ -229,7 +231,10 @@ def sync(
 
     # Show details for dry-run or if there are changes
     if dry_run and (
-        result["new"] > 0 or result["updated"] > 0 or result["recreated"] > 0
+        result["new"] > 0
+        or result["updated"] > 0
+        or result["recreated"] > 0
+        or result.get("reanalyzed", 0) > 0
     ):
         console.print("\n[blue]Details:[/blue]")
         for detail in result.get("details", [])[:10]:  # Show first 10
@@ -241,6 +246,7 @@ def sync(
                 "new": "green",
                 "updated": "yellow",
                 "recreated": "yellow",
+                "reanalyzed": "yellow",
                 "skipped": "magenta",
                 "error": "red",
             }.get(action, "white")

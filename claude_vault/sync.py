@@ -60,6 +60,7 @@ class SyncEngine:
             "updated": 0,
             "unchanged": 0,
             "recreated": 0,
+            "reanalyzed": 0,
             "skipped": 0,
             "errors": 0,
             "details": [],
@@ -229,13 +230,16 @@ class SyncEngine:
                             )
 
                         else:
-                            # File exists. Either the hash differs (real
-                            # content change) or a PII flag bypassed the fast
-                            # path and the user wants analysis applied even
-                            # though the source is unchanged. Either way we
-                            # rewrite the markdown with the current metadata.
-                            action = "updated"
-                            results["updated"] += 1
+                            # File exists. Hash changed, or a PII flag bypassed
+                            # the fast path.
+                            if existing.get("content_hash") == current_hash:
+                                # Unchanged content re-analyzed under a PII flag.
+                                action = "reanalyzed"
+                                results["reanalyzed"] += 1
+                            else:
+                                # Real content change.
+                                action = "updated"
+                                results["updated"] += 1
 
                             if not dry_run:
                                 self.markdown_gen.save(conv, file_path, related_convs)
