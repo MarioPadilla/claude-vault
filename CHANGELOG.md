@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.6](https://github.com/MarioPadilla/claude-vault/compare/v0.8.5...v0.8.6) (2026-06-29)
+
+
+### Bug Fixes
+
+* **sync:** skip LLM tagging for conversations whose content hash is unchanged ([#29](https://github.com/MarioPadilla/claude-vault/issues/29)) ([8315743](https://github.com/MarioPadilla/claude-vault/commit/8315743695522a69836a979a297527b017612e38))
+
 ## [0.8.5](https://github.com/MarioPadilla/claude-vault/compare/v0.8.4...v0.8.5) (2026-05-28)
 
 
