@@ -60,6 +60,7 @@ class SyncEngine:
             "updated": 0,
             "unchanged": 0,
             "recreated": 0,
+            "reanalyzed": 0,
             "skipped": 0,
             "errors": 0,
             "details": [],
@@ -103,6 +104,20 @@ class SyncEngine:
                                     "utf-8", errors="replace"
                                 )
                         current_hash = conv.content_hash()
+
+                    # Fast path: skip an unchanged conversation that's already on
+                    # disk. Source exports carry no tags, so the len(conv.tags) < 2
+                    # check below would otherwise re-run the LLM every sync only to
+                    # discard the result. PII flags still take the full path.
+                    if (
+                        not (detect_pii or redact_pii or skip_sensitive)
+                        and existing
+                        and existing.get("content_hash") == current_hash
+                    ):
+                        existing_path = self.vault_path / existing["file_path"]
+                        if existing_path.exists():
+                            results["unchanged"] += 1
+                            continue
 
                     # Generate tags/metadata if missing
                     if not conv.tags or len(conv.tags) < 2:
@@ -214,10 +229,17 @@ class SyncEngine:
                                 }
                             )
 
-                        elif existing["content_hash"] != current_hash:
-                            # File exists but content changed [3]
-                            action = "updated"
-                            results["updated"] += 1
+                        else:
+                            # File exists. Hash changed, or a PII flag bypassed
+                            # the fast path.
+                            if existing.get("content_hash") == current_hash:
+                                # Unchanged content re-analyzed under a PII flag.
+                                action = "reanalyzed"
+                                results["reanalyzed"] += 1
+                            else:
+                                # Real content change.
+                                action = "updated"
+                                results["updated"] += 1
 
                             if not dry_run:
                                 self.markdown_gen.save(conv, file_path, related_convs)
@@ -237,10 +259,6 @@ class SyncEngine:
                                     ),
                                 }
                             )
-
-                        else:
-                            # File exists and unchanged
-                            results["unchanged"] += 1
 
                 except Exception as e:
                     print(f"Error processing conversation {conv.title}: {e}")
