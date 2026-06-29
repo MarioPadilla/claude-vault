@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -221,7 +222,10 @@ class OpenCodeParser:
         }
 
         for tag, patterns in keywords.items():
-            if any(pattern in combined for pattern in patterns):
+            if any(
+                re.search(r"\b" + re.escape(pattern) + r"\b", combined)
+                for pattern in patterns
+            ):
                 tags.append(tag)
 
         return tags[:6]
