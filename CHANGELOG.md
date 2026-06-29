@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.7](https://github.com/MarioPadilla/claude-vault/compare/v0.8.6...v0.8.7) (2026-06-29)
+
+
+### Bug Fixes
+
+* **tagging:** use word-boundary matching to prevent substring false positives ([#32](https://github.com/MarioPadilla/claude-vault/issues/32)) ([ab972ad](https://github.com/MarioPadilla/claude-vault/commit/ab972adf6b7f38653e7e4ee0461ca7a67a02927b)), closes [#30](https://github.com/MarioPadilla/claude-vault/issues/30)
+
 ## [0.8.6](https://github.com/MarioPadilla/claude-vault/compare/v0.8.5...v0.8.6) (2026-06-29)
 
 
