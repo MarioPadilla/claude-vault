@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -304,7 +305,10 @@ class ClaudeCodeHistoryParser:
         }
 
         for tag, patterns in keywords.items():
-            if any(pattern in combined for pattern in patterns):
+            if any(
+                re.search(r"\b" + re.escape(pattern) + r"\b", combined)
+                for pattern in patterns
+            ):
                 tags.append(tag)
 
         return tags[:6]

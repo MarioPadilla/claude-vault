@@ -1,3 +1,4 @@
+import re
 from typing import List
 
 import requests
@@ -183,7 +184,10 @@ class OfflineTagGenerator:
 
         tags = []
         for tag, patterns in keywords.items():
-            if any(pattern in combined for pattern in patterns):
+            if any(
+                re.search(r"\b" + re.escape(pattern) + r"\b", combined)
+                for pattern in patterns
+            ):
                 tags.append(tag)
 
         return tags[:5] if tags else ["general"]
