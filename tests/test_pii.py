@@ -465,21 +465,22 @@ def test_redact_removes_truncated_private_key_to_end_of_text(detector):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "a-" * 100_000,
-        "token-" * 30_000,
-        "a." * 100_000,
-        "a" * 200_000,
-        "password=" * 20_000,
-        "://" * 60_000,
-    ],
-)
-def test_scan_and_redact_run_in_linear_time_on_adversarial_input(detector, text):
+ADVERSARIAL_INPUTS = {
+    "dash_run": "a-" * 100_000,
+    "keyword_run": "token-" * 30_000,
+    "dot_run": "a." * 100_000,
+    "word_run": "a" * 200_000,
+    "assignment_run": "password=" * 20_000,
+    "scheme_run": "://" * 60_000,
+}
+
+
+@pytest.mark.parametrize("name", sorted(ADVERSARIAL_INPUTS))
+def test_scan_and_redact_run_in_linear_time_on_adversarial_input(detector, name):
     """Unbounded repetition in a pattern backtracks quadratically (60s+ at 200k)"""
     import time
 
+    text = ADVERSARIAL_INPUTS[name]
     start = time.perf_counter()
     detector.scan(text)
     detector.redact(text)
