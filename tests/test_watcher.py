@@ -13,6 +13,7 @@ from claude_vault.watcher import (
     ClaudeVaultEventHandler,
     SyncQueue,
     WatchManager,
+    _pid_is_alive,
 )
 
 
@@ -331,6 +332,70 @@ def test_watch_manager_is_running_current_process(temp_vault):
 
                 # Should detect running process
                 assert manager._is_running() is True
+
+
+def test_watch_manager_is_running_corrupt_pid_file(temp_vault):
+    """Test is_running treats an unparseable PID file as stale"""
+    with patch("claude_vault.watcher.StateManager"):
+        with patch("claude_vault.watcher.SyncEngine"):
+            with patch("claude_vault.watcher.load_config") as mock_config:
+                mock_config.return_value.watch.debounce_seconds = 2.0
+                mock_config.return_value.watch.throttle_seconds = 10.0
+
+                manager = WatchManager(temp_vault)
+                manager.pid_file.parent.mkdir(parents=True, exist_ok=True)
+                manager.pid_file.write_text("not-a-pid")
+
+                assert manager._is_running() is False
+                assert not manager.pid_file.exists()
+
+
+def test_watch_manager_is_running_delegates_to_pid_liveness(temp_vault):
+    """Test is_running defers to _pid_is_alive and clears the file when dead"""
+    with patch("claude_vault.watcher.StateManager"):
+        with patch("claude_vault.watcher.SyncEngine"):
+            with patch("claude_vault.watcher.load_config") as mock_config:
+                mock_config.return_value.watch.debounce_seconds = 2.0
+                mock_config.return_value.watch.throttle_seconds = 10.0
+
+                manager = WatchManager(temp_vault)
+                manager.pid_file.parent.mkdir(parents=True, exist_ok=True)
+                manager.pid_file.write_text("1234")
+
+                with patch("claude_vault.watcher._pid_is_alive", return_value=True):
+                    assert manager._is_running() is True
+                assert manager.pid_file.exists()
+
+                with patch("claude_vault.watcher._pid_is_alive", return_value=False):
+                    assert manager._is_running() is False
+                assert not manager.pid_file.exists()
+
+
+def test_pid_is_alive_posix_probe():
+    """Test the POSIX branch maps os.kill outcomes to liveness"""
+    with patch("claude_vault.watcher.sys.platform", "linux"):
+        with patch("claude_vault.watcher.os.kill") as mock_kill:
+            assert _pid_is_alive(1234) is True
+            mock_kill.assert_called_once_with(1234, 0)
+
+            mock_kill.side_effect = ProcessLookupError
+            assert _pid_is_alive(1234) is False
+
+            mock_kill.side_effect = PermissionError
+            assert _pid_is_alive(1234) is True
+
+
+def test_pid_is_alive_windows_never_calls_os_kill():
+    """Regression test: os.kill(pid, 0) terminates the process on Windows"""
+    with patch("claude_vault.watcher.sys.platform", "win32"):
+        with patch("claude_vault.watcher.os.kill") as mock_kill:
+            with patch(
+                "claude_vault.watcher._pid_is_alive_windows", return_value=True
+            ) as mock_win:
+                assert _pid_is_alive(1234) is True
+
+    mock_win.assert_called_once_with(1234)
+    mock_kill.assert_not_called()
 
 
 def test_watch_manager_write_pid_file(temp_vault):
