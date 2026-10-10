@@ -1,3 +1,5 @@
+import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -32,6 +34,27 @@ class SyncEngine:
         self.tag_generator = OfflineTagGenerator()
         self.pii_detector = PIIDetector()
 
+    def _pii_fingerprint(
+        self, detect_pii: bool, redact_pii: bool, skip_sensitive: bool
+    ) -> str:
+        """Identify the PII settings a conversation is processed under.
+
+        Empty when no PII handling is requested. Stored next to the content hash
+        so an unchanged conversation is only skipped when it was already
+        processed under the same settings.
+        """
+        if not (detect_pii or redact_pii or skip_sensitive):
+            return ""
+        pii_config = self.pii_detector.config.pii
+        settings = [
+            detect_pii,
+            redact_pii,
+            skip_sensitive,
+            pii_config.use_llm,
+            pii_config.risk_threshold,
+        ]
+        return hashlib.sha256(json.dumps(settings).encode()).hexdigest()[:16]
+
     def sync(
         self,
         export_path: Path,
@@ -55,6 +78,8 @@ class SyncEngine:
         Returns:
             Dictionary with sync statistics and details
         """
+        pii_fingerprint = self._pii_fingerprint(detect_pii, redact_pii, skip_sensitive)
+
         results: Dict[str, Any] = {
             "new": 0,
             "updated": 0,
@@ -108,11 +133,16 @@ class SyncEngine:
                     # Fast path: skip an unchanged conversation that's already on
                     # disk. Source exports carry no tags, so the len(conv.tags) < 2
                     # check below would otherwise re-run the LLM every sync only to
-                    # discard the result. PII flags still take the full path.
+                    # discard the result. With PII handling on, it only applies when
+                    # the conversation was already processed under the same settings.
                     if (
-                        not (detect_pii or redact_pii or skip_sensitive)
-                        and existing
+                        existing
                         and existing.get("content_hash") == current_hash
+                        and (
+                            not pii_fingerprint
+                            or existing["metadata"].get("pii_fingerprint")
+                            == pii_fingerprint
+                        )
                     ):
                         existing_path = self.vault_path / existing["file_path"]
                         if existing_path.exists():
@@ -125,11 +155,20 @@ class SyncEngine:
                         conv.tags = metadata["tags"]
                         conv.summary = metadata["summary"]
 
+                    # Fingerprint recorded for this conversation; stays empty unless
+                    # PII analysis ran to completion, so it is retried next sync
+                    stored_fingerprint = ""
+
                     # PII / sensitive content detection
                     if detect_pii or redact_pii or skip_sensitive:
                         pii_config = self.pii_detector.config.pii
                         use_llm = pii_config.use_llm
                         pii_result = self.pii_detector.analyze(conv, use_llm=use_llm)
+
+                        # A silent LLM fallback (Ollama down) is regex-only, so it
+                        # must not be recorded as done
+                        if pii_result.llm_used or not use_llm:
+                            stored_fingerprint = pii_fingerprint
 
                         conv.pii_detected = pii_result.detected
                         conv.risk_level = pii_result.risk_level
@@ -170,6 +209,11 @@ class SyncEngine:
                             for msg in conv.messages:
                                 msg.content = self.pii_detector.redact(msg.content)
 
+                    state_metadata = {
+                        "title": conv.title,
+                        "pii_fingerprint": stored_fingerprint,
+                    }
+
                     # Find related conversations based on tags [3]
                     related_convs = self._find_related_by_tags(conv, conversations)
 
@@ -185,7 +229,7 @@ class SyncEngine:
                                 conv.id,
                                 str(file_path.relative_to(self.vault_path)),
                                 current_hash,
-                                {"title": conv.title},
+                                state_metadata,
                             )
 
                         results["details"].append(
@@ -215,7 +259,7 @@ class SyncEngine:
                                     conv.id,
                                     str(file_path.relative_to(self.vault_path)),
                                     current_hash,
-                                    {"title": conv.title},
+                                    state_metadata,
                                 )
                                 print(f"[yellow]⚠ Recreated: {file_path.name}[/yellow]")
 
@@ -247,7 +291,7 @@ class SyncEngine:
                                     conv.id,
                                     str(file_path.relative_to(self.vault_path)),
                                     current_hash,
-                                    {"title": conv.title},
+                                    state_metadata,
                                 )
 
                             results["details"].append(

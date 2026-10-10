@@ -21,6 +21,8 @@ class PIIScanResult:
     pii_types: List[str] = field(default_factory=list)
     # type → list of raw matched strings (used for redaction)
     matches: Dict[str, List[str]] = field(default_factory=dict)
+    # True only when LLM classification actually ran and returned a verdict
+    llm_used: bool = False
 
 
 class PIIDetector:
@@ -107,8 +109,9 @@ class PIIDetector:
         """
         Use Ollama to classify whether a conversation contains sensitive content.
 
-        Returns a dict with keys: is_sensitive, risk_level, reason.
-        Falls back to {"is_sensitive": False, "risk_level": "none"} on any error.
+        Returns a dict with keys: is_sensitive, risk_level, reason, classified.
+        Falls back to {"is_sensitive": False, "risk_level": "none"} on any error,
+        with classified False so callers can tell a fallback from a real verdict.
         """
         sample = self._build_sample(conversation)
         prompt = (
@@ -146,11 +149,17 @@ class PIIDetector:
                     "is_sensitive": bool(data.get("is_sensitive", False)),
                     "risk_level": risk,
                     "reason": data.get("reason", ""),
+                    "classified": True,
                 }
         except Exception:
             pass
 
-        return {"is_sensitive": False, "risk_level": "none", "reason": ""}
+        return {
+            "is_sensitive": False,
+            "risk_level": "none",
+            "reason": "",
+            "classified": False,
+        }
 
     def analyze(
         self, conversation: Conversation, use_llm: bool = True
@@ -172,6 +181,7 @@ class PIIDetector:
 
         if use_llm and self._ollama_available():
             llm_result = self.classify_with_llm(conversation)
+            result.llm_used = llm_result.get("classified", False)
             llm_risk = llm_result.get("risk_level", "none")
             # Elevate risk level if LLM found something higher
             if _RISK_ORDER.get(llm_risk, 0) > _RISK_ORDER.get(result.risk_level, 0):
