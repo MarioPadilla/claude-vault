@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.11](https://github.com/MarioPadilla/claude-vault/compare/v0.8.10...v0.8.11) (2026-10-10)
+
+
+### Bug Fixes
+
+* **config:** read config as UTF-8 with BOM support and warn when it cannot be read ([#45](https://github.com/MarioPadilla/claude-vault/issues/45)) ([8c98272](https://github.com/MarioPadilla/claude-vault/commit/8c98272fd8e3c63a9acaf971fa11f639a7c28660))
+* **sync:** redact and scan the title and summary, not only message bodies ([#47](https://github.com/MarioPadilla/claude-vault/issues/47)) ([38a68c4](https://github.com/MarioPadilla/claude-vault/commit/38a68c4b5c8c43edb32e0451b916ffc2ba27e3b9))
+* **sync:** report sensitive files that skip_sensitive leaves in the vault ([#48](https://github.com/MarioPadilla/claude-vault/issues/48)) ([9e1291a](https://github.com/MarioPadilla/claude-vault/commit/9e1291a84114bbfd5291f8c9f32704371dc8f322))
+* **sync:** rescan stored conversations when the PII detector changes ([#49](https://github.com/MarioPadilla/claude-vault/issues/49)) ([6537a5d](https://github.com/MarioPadilla/claude-vault/commit/6537a5da6467496ec941e8b45952d3eb38378665))
+* **watcher:** reject invalid PIDs before probing or signalling them ([#50](https://github.com/MarioPadilla/claude-vault/issues/50)) ([b4c58cb](https://github.com/MarioPadilla/claude-vault/commit/b4c58cb87ff53c9c591cf0403f4b0a63bd514029))
+
 ## [0.8.10](https://github.com/MarioPadilla/claude-vault/compare/v0.8.9...v0.8.10) (2026-10-10)
 
 
