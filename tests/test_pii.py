@@ -458,3 +458,61 @@ def test_redact_removes_whole_private_key_block(detector):
 def test_redact_removes_truncated_private_key_to_end_of_text(detector):
     redacted = detector.redact("x\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkq")
     assert "MIIEvQIBADANBgkq" not in redacted
+
+
+# ---------------------------------------------------------------------------
+# Regressions found in review of the detector rewrite
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a-" * 100_000,
+        "token-" * 30_000,
+        "a." * 100_000,
+        "a" * 200_000,
+        "password=" * 20_000,
+        "://" * 60_000,
+    ],
+)
+def test_scan_and_redact_run_in_linear_time_on_adversarial_input(detector, text):
+    """Unbounded repetition in a pattern backtracks quadratically (60s+ at 200k)"""
+    import time
+
+    start = time.perf_counter()
+    detector.scan(text)
+    detector.redact(text)
+    assert time.perf_counter() - start < 5
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "password: hunter2",
+        "token: short1",
+        "password=abc123",
+        '{"password": "hunter2hunter2"}',
+        '"api_key": "abcdefgh12345678"',
+        "Authorization: Basic dXNlcjpzdXBlcnNlY3JldHBhc3N3b3Jk",
+        "redis://:s3cretpass@cache:6379/0",
+    ],
+)
+def test_scan_detects_short_quoted_and_basic_auth_credentials(detector, text):
+    assert detector.scan(text).detected
+
+
+def test_redact_removes_whole_quoted_passphrase(detector):
+    redacted = detector.redact('password="correct horse battery"')
+    assert "horse" not in redacted and "battery" not in redacted
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "max_tokens = 4096 and token_count: 1200",
+        "input tokens: 12345678 output tokens: 99",
+    ],
+)
+def test_scan_ignores_numeric_token_counts(detector, text):
+    assert not detector.scan(text).detected

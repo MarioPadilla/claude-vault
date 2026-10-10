@@ -69,9 +69,12 @@ class PIIDetector:
         # scheme://user:password@host, before email so its user:pass@ is not
         # reported as an address
         "connection_string": re.compile(
-            r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s:/@]+:[^\s@/]+@"
+            r"\b[a-zA-Z][a-zA-Z0-9+.\-]{0,30}://[^\s:/@]*:[^\s@/]+@"
         ),
-        "email": re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"),
+        # Length caps are the RFC limits; unbounded runs backtrack quadratically
+        "email": re.compile(
+            r"\b[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,253}\.[A-Za-z]{2,24}\b"
+        ),
         # Needs a separator, parentheses or a leading +, so bare 10-digit ids and
         # epoch timestamps are not phone numbers
         "phone": re.compile(
@@ -94,7 +97,7 @@ class PIIDetector:
             r"|xox[abprs]-[A-Za-z0-9\-]{10,}"  # Slack
             r"|[sr]k_(?:live|test)_[A-Za-z0-9]{16,}"  # Stripe
             r")\b"
-            r"|(?i:\bBearer)\s+[A-Za-z0-9\-._~+/]{16,}=*"  # Authorization header
+            r"|(?i:\b(?:Bearer|Basic))\s+[A-Za-z0-9\-._~+/]{16,}=*"  # Authorization
         ),
         "ip_address": re.compile(
             r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
@@ -103,8 +106,10 @@ class PIIDetector:
         # name = value where the name says it is a secret, e.g.
         # AWS_SECRET_ACCESS_KEY=..., password: ..., but not max_tokens = 4096
         "credential_context": re.compile(
-            r"(?i)\b[\w\-]*(?:password|passwd|secret|token|api[_\-]?key|access[_\-]?key)"
-            r"[\w\-]*\s*[:=]\s*\S{8,}"
+            r"(?i)(?<![\w\-])[\w\-]{0,40}?"
+            r"(?:password|passwd|secret|token|api[_\-]?key|access[_\-]?key)"
+            r"(?:[_\-][\w\-]{0,40})?[\"']?\s*[:=]\s*"
+            r"(?!\d+\b)(?:\"[^\"\n]{4,}\"|'[^'\n]{4,}'|[\"']?\S{4,})"
         ),
         # Last: anything long and random-looking that no rule above recognised
         "secret_token": re.compile(r"\b[A-Za-z0-9_\-]{32,}\b"),
