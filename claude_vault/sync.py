@@ -204,10 +204,15 @@ class SyncEngine:
                                 )
                                 continue
 
-                        # Redact PII from message content if requested
+                        # Redact PII from everything written to disk if requested:
+                        # message content, plus the title (frontmatter, heading and
+                        # filename) and the summary
                         if redact_pii and pii_result.detected:
                             for msg in conv.messages:
                                 msg.content = self.pii_detector.redact(msg.content)
+                            conv.title = self.pii_detector.redact(conv.title)
+                            if conv.summary:
+                                conv.summary = self.pii_detector.redact(conv.summary)
 
                     state_metadata = {
                         "title": conv.title,
@@ -215,7 +220,9 @@ class SyncEngine:
                     }
 
                     # Find related conversations based on tags [3]
-                    related_convs = self._find_related_by_tags(conv, conversations)
+                    related_convs = self._find_related_by_tags(
+                        conv, conversations, redact=redact_pii
+                    )
 
                     if not existing:
                         # New conversation
@@ -317,12 +324,13 @@ class SyncEngine:
 
         return results
 
-    def _generate_path(self, conversation) -> Path:
+    def _generate_path(self, conversation, title: Optional[str] = None) -> Path:
         """
         Generate file path for conversation
 
         Args:
             conversation: Conversation object
+            title: Title to build the filename from, if not conversation.title
 
         Returns:
             Path object for the markdown file
@@ -330,7 +338,7 @@ class SyncEngine:
         date_str = conversation.created_at.strftime("%Y-%m-%d")
 
         # Create safe filename from title
-        safe_title = re.sub(r"[^\w\s-]", "", conversation.title)
+        safe_title = re.sub(r"[^\w\s-]", "", title or conversation.title)
         safe_title = re.sub(r"[-\s]+", "-", safe_title)
         safe_title = safe_title[:50]  # Limit length
 
@@ -359,9 +367,18 @@ class SyncEngine:
         return None
 
     def _find_related_by_tags(
-        self, conversation: Conversation, all_conversations: list[Conversation]
+        self,
+        conversation: Conversation,
+        all_conversations: list[Conversation],
+        redact: bool = False,
     ) -> list[Dict]:
-        """Find conversations with similar tags"""
+        """Find conversations with similar tags
+
+        With redact on, the related titles and filenames are the redacted ones,
+        which is what those conversations are written under. Without this the
+        result depended on processing order: conversations already handled had
+        redacted titles in the shared list and the rest did not.
+        """
 
         related: List[Dict] = []
         conv_tags = set(conversation.tags)
@@ -378,12 +395,15 @@ class SyncEngine:
 
             # At least 2 common tags = related [3]
             if len(common_tags) >= 2:
+                other_title = other_conv.title
+                if redact:
+                    other_title = self.pii_detector.redact(other_title)
                 related.append(
                     {
                         "id": other_conv.id,
-                        "title": other_conv.title,
+                        "title": other_title,
                         "common_tags": list(common_tags),
-                        "file": self._generate_path(other_conv).name,
+                        "file": self._generate_path(other_conv, other_title).name,
                     }
                 )
 
