@@ -3,6 +3,7 @@ import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from claude_vault.cli import app
@@ -218,3 +219,23 @@ def test_sync_cli_flag_enables_pii_when_config_is_off(tmp_path):
 
     assert kwargs["redact_pii"] is True
     assert kwargs["detect_pii"] is False
+
+
+@pytest.mark.parametrize("recorded_pid", [0, -1, None])
+def test_watch_stop_does_not_signal_an_invalid_recorded_pid(tmp_path, recorded_pid):
+    """The pid comes from the state DB. os.kill(0, ...) signals the process group
+    and os.kill(-1, ...) every process the user can signal."""
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+
+        with patch("claude_vault.cli.WatchManager") as mock_manager:
+            mock_manager.return_value.get_status.return_value = {
+                "is_running": True,
+                "pid": recorded_pid,
+            }
+            with patch("os.kill") as mock_kill:
+                result = runner.invoke(app, ["watch-stop"])
+
+        assert result.exit_code == 0
+        mock_kill.assert_not_called()
+        assert "No valid watch process id" in result.stdout
