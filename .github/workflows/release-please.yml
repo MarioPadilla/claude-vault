@@ -11,7 +11,19 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           release-type: python
+
+  # Releases created with the default GITHUB_TOKEN do not trigger other
+  # workflows, so the "release: published" trigger in publish.yml never fires
+  # for them. Call it directly instead.
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/publish.yml
+    secrets: inherit
