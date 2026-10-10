@@ -357,7 +357,13 @@ class WatchManager:
             else:
                 self.sync_engine.parser = ClaudeExportParser()
 
-            results = self.sync_engine.sync(file_path)
+            pii_config = self.config.pii
+            results = self.sync_engine.sync(
+                file_path,
+                detect_pii=pii_config.enabled,
+                redact_pii=pii_config.redact,
+                skip_sensitive=pii_config.skip_sensitive,
+            )
 
             # Update statistics
             state = self.state.get_watch_state()
