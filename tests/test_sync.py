@@ -709,3 +709,77 @@ def test_conversation_scanned_by_an_older_detector_is_scanned_again(tmp_path):
 
     assert second["reanalyzed"] == 1
     assert _read_frontmatter(tmp_path)["pii_scanned"] is True
+
+
+def _store_chunk(engine, vault, conv_id, text):
+    """Put a chunk in the search index the way semantic search does"""
+    import numpy as np
+
+    engine.state.save_embedding(
+        conv_id, 0, text, np.array([0.1, 0.2, 0.3], dtype=np.float32), "test-model"
+    )
+
+
+def _index_chunks(engine):
+    return [e["chunk_text"] for e in engine.state.get_all_embeddings()]
+
+
+def test_redacting_a_conversation_also_clears_its_search_index_entries(tmp_path):
+    """The embeddings table keeps a copy of each chunk's text and search shows it.
+    Re-syncing with redaction rewrote the file but left the original, unredacted
+    text in state.db, so search handed it back."""
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Notes", "conv-idx-001", body="my email is alice@example.com")
+
+    _sync_with_analysis(engine, export_file, conv, _analysed())
+    _store_chunk(engine, tmp_path, "conv-idx-001", "my email is alice@example.com")
+    assert any("alice@example.com" in c for c in _index_chunks(engine))
+
+    medium = PIIScanResult(
+        detected=True, risk_level="medium", pii_types=["email"], llm_used=True
+    )
+    _sync_with_analysis(engine, export_file, conv, medium, redact_pii=True)
+
+    assert _index_chunks(engine) == []
+
+
+def test_new_content_clears_stale_search_index_entries(tmp_path):
+    engine, export_file = _redaction_engine(tmp_path)
+    original = _titled_conv("Notes", "conv-idx-002", body="first version")
+    _sync_with_analysis(engine, export_file, original, _analysed())
+    _store_chunk(engine, tmp_path, "conv-idx-002", "first version")
+
+    changed = _titled_conv("Notes", "conv-idx-002", body="second version")
+    _sync_with_analysis(engine, export_file, changed, _analysed())
+
+    assert _index_chunks(engine) == []
+
+
+def test_unchanged_conversation_keeps_its_search_index_entries(tmp_path):
+    """Dropping the index on every sync would force every embedding to be rebuilt"""
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Notes", "conv-idx-003", body="stable text")
+    with patch.object(engine.parser, "parse", return_value=[conv]):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            engine.sync(export_file)
+            _store_chunk(engine, tmp_path, "conv-idx-003", "stable text")
+            result = engine.sync(export_file)
+
+    assert result["unchanged"] == 1
+    assert _index_chunks(engine) == ["stable text"]
+
+
+def test_dry_run_does_not_touch_the_search_index(tmp_path):
+    engine, export_file = _redaction_engine(tmp_path)
+    original = _titled_conv("Notes", "conv-idx-004", body="first version")
+    _sync_with_analysis(engine, export_file, original, _analysed())
+    _store_chunk(engine, tmp_path, "conv-idx-004", "first version")
+
+    changed = _titled_conv("Notes", "conv-idx-004", body="second version")
+    _sync_with_analysis(engine, export_file, changed, _analysed(), dry_run=True)
+
+    assert _index_chunks(engine) == ["first version"]
