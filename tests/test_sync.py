@@ -181,7 +181,7 @@ def test_sync_redact_pii_keeps_content_hash_stable(tmp_path):
                     # --redact-pii rewrites the markdown for unchanged source,
                     # counted as reanalyzed (not updated).
                     second = engine.sync(export_file, redact_pii=True)
-                    assert mock_redact.call_count == 1
+                    assert mock_redact.called
                     assert second["reanalyzed"] == 1
                     assert second["updated"] == 0
 
@@ -370,3 +370,99 @@ def test_sync_pii_fingerprint_is_empty_without_pii_handling(tmp_path):
     assert engine._pii_fingerprint(True, False, False) != engine._pii_fingerprint(
         False, True, False
     )
+
+
+def _redaction_engine(tmp_path):
+    export_file = tmp_path / "conversations.json"
+    export_file.write_text("[]")
+    (tmp_path / ".claude-vault").mkdir()
+    (tmp_path / "conversations").mkdir()
+    engine = SyncEngine(tmp_path)
+    engine.pii_detector.config.pii.use_llm = False
+    return engine, export_file
+
+
+def _titled_conv(title, uuid, body="please deploy"):
+    return Conversation(
+        id=uuid,
+        title=title,
+        messages=[Message(role="human", content=body)],
+        created_at=datetime(2024, 1, 1),
+        updated_at=datetime(2024, 1, 1),
+    )
+
+
+def test_redact_pii_also_redacts_title_summary_and_filename(tmp_path):
+    """Everything written to disk must be redacted, not just message bodies.
+
+    Regression test: the title went into the frontmatter, the heading and the
+    filename, and the LLM summary into the frontmatter, all unredacted.
+    """
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Ping alice@example.com about the deploy", "conv-title-001")
+
+    with patch.object(engine.parser, "parse", return_value=[conv]):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={
+                "tags": ["t1", "t2"],
+                "summary": "Asked alice@example.com to deploy",
+            },
+        ):
+            engine.sync(export_file, redact_pii=True)
+
+    files = list((tmp_path / "conversations").glob("*.md"))
+    assert len(files) == 1
+    assert "alice" not in files[0].name
+    assert "example" not in files[0].name
+    text = files[0].read_text(encoding="utf-8")
+    assert "alice@example.com" not in text
+    assert "[REDACTED-EMAIL]" in text
+
+
+def test_detect_pii_flags_pii_that_is_only_in_the_title(tmp_path):
+    """A secret in the title alone must be detected, not just ones in messages"""
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Rotate key AKIAIOSFODNN7EXAMPLE", "conv-title-002")
+
+    with patch.object(engine.parser, "parse", return_value=[conv]):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            engine.sync(export_file, detect_pii=True)
+
+    text = next((tmp_path / "conversations").glob("*.md")).read_text(encoding="utf-8")
+    assert "pii_detected: true" in text
+
+
+def test_redact_pii_hides_related_titles_regardless_of_order(tmp_path):
+    """related_tags/wikilinks name other conversations by their written title.
+
+    The shared conversation list is mutated as each one is processed, so without
+    redacting there too, an earlier file leaked a later conversation's real title
+    while a later file saw the already-redacted one.
+    """
+    engine, export_file = _redaction_engine(tmp_path)
+    convs = [
+        _titled_conv("Ping alice@example.com", "conv-rel-001"),
+        _titled_conv("Notes for bob@example.com", "conv-rel-002"),
+    ]
+    for conv in convs:
+        conv.tags = ["shared-a", "shared-b"]
+
+    with patch.object(engine.parser, "parse", return_value=convs):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["shared-a", "shared-b"], "summary": "s"},
+        ):
+            engine.sync(export_file, redact_pii=True)
+
+    for md_file in (tmp_path / "conversations").glob("*.md"):
+        text = md_file.read_text(encoding="utf-8")
+        assert "alice@example.com" not in text
+        assert "bob@example.com" not in text
+        assert "alice" not in md_file.name and "bob" not in md_file.name

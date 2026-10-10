@@ -312,8 +312,11 @@ class PIIDetector:
         Returns:
             PIIScanResult with the highest risk level from either method.
         """
-        # Aggregate all message content
-        full_text = "\n".join(m.content for m in conversation.messages)
+        # Aggregate everything that gets written to disk: the title ends up in the
+        # frontmatter, the heading and the filename, and the summary in frontmatter
+        parts = [conversation.title, conversation.summary or ""]
+        parts.extend(m.content for m in conversation.messages)
+        full_text = "\n".join(parts)
         result = self.scan(full_text)
 
         if use_llm and self._ollama_available():
