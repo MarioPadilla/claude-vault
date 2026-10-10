@@ -1,4 +1,5 @@
 import json
+import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -71,9 +72,16 @@ def load_config() -> Config:
         return Config()
 
     try:
-        with open(CONFIG_FILE) as f:
+        # utf-8-sig accepts a BOM (Windows editors add one) and plain UTF-8; the
+        # locale default would fail on non-ASCII content under cp1252
+        with open(CONFIG_FILE, encoding="utf-8-sig") as f:
             data = json.load(f)
             return Config(**data)
-    except Exception:
-        # If config is corrupt, return defaults
+    except Exception as e:
+        # Defaults mean privacy settings such as pii.redact are off, so say so
+        warnings.warn(
+            f"Could not read {CONFIG_FILE} ({type(e).__name__}: {e}). "
+            "Using default settings, which means PII handling is OFF.",
+            stacklevel=2,
+        )
         return Config()
