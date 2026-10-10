@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1](https://github.com/MarioPadilla/claude-vault/compare/v0.9.0...v0.9.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **sync:** drop stale search index entries when a conversation is rewritten ([#57](https://github.com/MarioPadilla/claude-vault/issues/57)) ([925d964](https://github.com/MarioPadilla/claude-vault/commit/925d9646cd44c43fd57bd8ea8fd844996898c04b))
+* **verify:** detect conversation files that were cut short or emptied ([#54](https://github.com/MarioPadilla/claude-vault/issues/54)) ([8b86e67](https://github.com/MarioPadilla/claude-vault/commit/8b86e675fd3aa0823eccabf36b7223bbe439efa8))
+
 ## [0.9.0](https://github.com/MarioPadilla/claude-vault/compare/v0.8.11...v0.9.0) (2026-10-10)
 
 
