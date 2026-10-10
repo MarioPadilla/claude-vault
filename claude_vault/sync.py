@@ -41,7 +41,7 @@ class SyncEngine:
 
         Empty when no PII handling is requested. Stored next to the content hash
         so an unchanged conversation is only skipped when it was already
-        processed under the same settings.
+        processed under the same settings, by the same version of the detector.
         """
         if not (detect_pii or redact_pii or skip_sensitive):
             return ""
@@ -52,6 +52,7 @@ class SyncEngine:
             skip_sensitive,
             pii_config.use_llm,
             pii_config.risk_threshold,
+            self.pii_detector.version,
         ]
         return hashlib.sha256(json.dumps(settings).encode()).hexdigest()[:16]
 

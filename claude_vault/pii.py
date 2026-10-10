@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import re
@@ -12,6 +13,11 @@ from .models import Conversation
 
 # Risk level ordering for comparison
 _RISK_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3}
+
+# Bump when detection logic changes in a way the patterns and risk table below do
+# not show: the validators, the span handling, or what text gets scanned. Changes
+# to the patterns themselves are picked up automatically by PIIDetector.version.
+DETECTOR_REVISION = 1
 
 
 def _luhn_valid(candidate: str) -> bool:
@@ -178,6 +184,22 @@ class PIIDetector:
 
     def __init__(self) -> None:
         self.config = load_config()
+
+    @property
+    def version(self) -> str:
+        """Identifies what this detector would find, for change detection.
+
+        Derived from the patterns and the risk table, so editing either changes it
+        without anyone having to remember to bump a number. Stored with each
+        processed conversation: when it changes, conversations scanned by an older
+        detector are scanned again instead of being skipped as already done.
+        """
+        rules = [
+            [name, pattern.pattern, pattern.flags]
+            for name, pattern in self.REGEX_PATTERNS.items()
+        ]
+        payload = json.dumps([DETECTOR_REVISION, rules, self._TYPE_RISK])
+        return hashlib.sha256(payload.encode()).hexdigest()[:12]
 
     # ------------------------------------------------------------------
     # Public API

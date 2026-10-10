@@ -602,3 +602,54 @@ def test_scan_and_redact_agree_on_what_was_found(detector, text):
     assert pii_types
     for pii_type in pii_types:
         assert f"[REDACTED-{pii_type.upper().replace('_', '-')}]" in redacted
+
+
+# ---------------------------------------------------------------------------
+# Detector version – lets stored scan results be invalidated when detection changes
+# ---------------------------------------------------------------------------
+
+
+def test_detector_version_is_stable(detector):
+    assert detector.version == detector.version
+    assert detector.version == PIIDetector().version
+    assert len(detector.version) == 12
+
+
+def test_detector_version_changes_when_a_pattern_changes(detector):
+    import re as _re
+
+    before = detector.version
+    original = PIIDetector.REGEX_PATTERNS["ssn"]
+    try:
+        PIIDetector.REGEX_PATTERNS["ssn"] = _re.compile(r"\b\d{3}-\d{2}-\d{4}x\b")
+        assert detector.version != before
+    finally:
+        PIIDetector.REGEX_PATTERNS["ssn"] = original
+    assert detector.version == before
+
+
+def test_detector_version_changes_when_a_pattern_is_added_or_risk_changes(detector):
+    import re as _re
+
+    before = detector.version
+    try:
+        PIIDetector.REGEX_PATTERNS["extra"] = _re.compile(r"zzz")
+        assert detector.version != before
+    finally:
+        del PIIDetector.REGEX_PATTERNS["extra"]
+
+    original = PIIDetector._TYPE_RISK["email"]
+    try:
+        PIIDetector._TYPE_RISK["email"] = "high"
+        assert detector.version != before
+    finally:
+        PIIDetector._TYPE_RISK["email"] = original
+    assert detector.version == before
+
+
+def test_detector_version_changes_when_the_revision_is_bumped(detector, monkeypatch):
+    from claude_vault import pii
+
+    before = detector.version
+    monkeypatch.setattr(pii, "DETECTOR_REVISION", pii.DETECTOR_REVISION + 1)
+    assert detector.version != before

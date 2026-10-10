@@ -578,3 +578,38 @@ def test_skip_sensitive_dry_run_does_not_record_the_skip(tmp_path):
     )
 
     assert analyze.call_count == 1
+
+
+def test_sync_rescans_when_the_pii_detector_changed(tmp_path):
+    """An unchanged conversation scanned by an older detector must be scanned again.
+
+    Otherwise a detector upgrade (new secret formats, fewer false positives) never
+    reaches the conversations already in the vault, and the settings fingerprint
+    still matches.
+    """
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-version-001")
+
+    with patch.object(engine.parser, "parse", return_value=[conv]):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed()
+            ) as mock_analyze:
+                engine.sync(export_file, detect_pii=True)
+                engine.sync(export_file, detect_pii=True)
+                assert mock_analyze.call_count == 1  # same detector: skipped
+
+                with patch.object(
+                    type(engine.pii_detector),
+                    "version",
+                    new_callable=lambda: property(lambda self: "newdetector"),
+                ):
+                    second = engine.sync(export_file, detect_pii=True)
+
+    assert mock_analyze.call_count == 2
+    assert second["reanalyzed"] == 1
+    assert second["unchanged"] == 0
