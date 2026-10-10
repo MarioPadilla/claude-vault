@@ -87,6 +87,8 @@ class SyncEngine:
             "recreated": 0,
             "reanalyzed": 0,
             "skipped": 0,
+            # Files of skipped conversations that are already in the vault
+            "skipped_on_disk": [],
             "errors": 0,
             "details": [],
         }
@@ -146,7 +148,14 @@ class SyncEngine:
                     ):
                         existing_path = self.vault_path / existing["file_path"]
                         if existing_path.exists():
-                            results["unchanged"] += 1
+                            if pii_fingerprint and existing["metadata"].get(
+                                "skipped_sensitive"
+                            ):
+                                # Skipped before under these settings; the file is
+                                # still there, so keep saying so
+                                self._report_skipped(results, conv, existing_path)
+                            else:
+                                results["unchanged"] += 1
                             continue
 
                     # Generate tags/metadata if missing
@@ -193,15 +202,27 @@ class SyncEngine:
                             if _RISK_ORDER.get(
                                 pii_result.risk_level, 0
                             ) >= _RISK_ORDER.get(threshold, 2):
-                                results["skipped"] += 1
-                                results["details"].append(
-                                    {
-                                        "action": "skipped",
-                                        "title": conv.title,
-                                        "risk_level": pii_result.risk_level,
-                                        "pii_types": pii_result.pii_types,
-                                    }
+                                on_disk = self._existing_file(existing)
+                                self._report_skipped(
+                                    results,
+                                    conv,
+                                    on_disk,
+                                    pii_result.risk_level,
+                                    pii_result.pii_types,
                                 )
+                                if existing and not dry_run:
+                                    # Remember the skip so it is not re-analysed on
+                                    # every sync. The file is left as it is.
+                                    self.state.save_conversation(
+                                        conv.id,
+                                        existing["file_path"],
+                                        current_hash,
+                                        {
+                                            "title": conv.title,
+                                            "pii_fingerprint": stored_fingerprint,
+                                            "skipped_sensitive": True,
+                                        },
+                                    )
                                 continue
 
                         # Redact PII from everything written to disk if requested:
@@ -344,6 +365,42 @@ class SyncEngine:
 
         filename = f"{date_str}-{safe_title}.md"
         return self.conversations_dir / filename
+
+    def _existing_file(self, existing: Optional[Dict]) -> Optional[Path]:
+        """The vault file already written for a conversation, if there is one"""
+        if not existing:
+            return None
+        recorded: Path = self.vault_path / existing["file_path"]
+        if recorded.exists():
+            return recorded
+        return self._find_moved_file(existing["uuid"])
+
+    def _report_skipped(
+        self,
+        results: Dict[str, Any],
+        conv: Conversation,
+        on_disk: Optional[Path],
+        risk_level: str = "",
+        pii_types: Optional[List[str]] = None,
+    ) -> None:
+        """Count a skipped conversation, and say if its file is still in the vault.
+
+        skip_sensitive keeps new sensitive conversations out; it does not touch a
+        file that was written earlier, which may have been edited. Reporting it
+        lets the user decide instead of believing the vault is clean.
+        """
+        results["skipped"] += 1
+        detail: Dict[str, Any] = {
+            "action": "skipped",
+            "title": conv.title,
+            "risk_level": risk_level,
+            "pii_types": pii_types or [],
+        }
+        if on_disk:
+            relative = str(on_disk.relative_to(self.vault_path))
+            detail["file_path"] = relative
+            results["skipped_on_disk"].append(relative)
+        results["details"].append(detail)
 
     def _find_moved_file(self, uuid: str) -> Optional[Path]:
         """
