@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from claude_vault.models import Conversation, Message
@@ -510,7 +511,10 @@ def test_skip_sensitive_reports_but_keeps_a_file_written_before_the_skip(tmp_pat
     )
 
     assert second["skipped"] == 1
-    assert second["skipped_on_disk"] == [f"conversations/{written[0].name}"]
+    # Shown to the user with the OS separators, so compare as paths
+    assert [Path(p) for p in second["skipped_on_disk"]] == [
+        Path("conversations") / written[0].name
+    ]
     assert written[0].exists()
     assert written[0].read_text(encoding="utf-8") == before
 
