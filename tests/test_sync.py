@@ -466,3 +466,115 @@ def test_redact_pii_hides_related_titles_regardless_of_order(tmp_path):
         assert "alice@example.com" not in text
         assert "bob@example.com" not in text
         assert "alice" not in md_file.name and "bob" not in md_file.name
+
+
+def _skip_engine(tmp_path):
+    engine, export_file = _redaction_engine(tmp_path)
+    engine.pii_detector.config.pii.risk_threshold = "medium"
+    return engine, export_file
+
+
+def _flagged():
+    return PIIScanResult(
+        detected=True, risk_level="high", pii_types=["email"], llm_used=True
+    )
+
+
+def _sync_with_analysis(engine, export_file, conv, result, **flags):
+    with patch.object(engine.parser, "parse", return_value=[conv]):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=result
+            ) as mock_analyze:
+                return engine.sync(export_file, **flags), mock_analyze
+
+
+def test_skip_sensitive_reports_but_keeps_a_file_written_before_the_skip(tmp_path):
+    """skip_sensitive keeps new sensitive text out; it must not claim the vault is
+    clean while an earlier file with that text is still there."""
+    engine, export_file = _skip_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-skip-001", body="mail alice@example.com")
+
+    # Written by a plain sync, before skip_sensitive was turned on
+    first, _ = _sync_with_analysis(engine, export_file, conv, _flagged())
+    written = list((tmp_path / "conversations").glob("*.md"))
+    assert first["new"] == 1 and len(written) == 1
+    before = written[0].read_text(encoding="utf-8")
+
+    second, _ = _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True
+    )
+
+    assert second["skipped"] == 1
+    assert second["skipped_on_disk"] == [f"conversations/{written[0].name}"]
+    assert written[0].exists()
+    assert written[0].read_text(encoding="utf-8") == before
+
+
+def test_skip_sensitive_of_a_new_conversation_reports_no_file(tmp_path):
+    engine, export_file = _skip_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-skip-002", body="mail alice@example.com")
+
+    result, _ = _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True
+    )
+
+    assert result["skipped"] == 1
+    assert result["skipped_on_disk"] == []
+    assert list((tmp_path / "conversations").glob("*.md")) == []
+
+
+def test_skip_sensitive_is_remembered_so_it_is_not_reanalysed_every_sync(tmp_path):
+    """A skipped conversation wrote no state, so every sync (and every watch event)
+    ran full analysis, including the LLM, on it again."""
+    engine, export_file = _skip_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-skip-003", body="mail alice@example.com")
+    _sync_with_analysis(engine, export_file, conv, _flagged())
+
+    _, first_analyze = _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True
+    )
+    second, second_analyze = _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True
+    )
+
+    assert first_analyze.call_count == 1
+    assert second_analyze.call_count == 0
+    # Still reported as skipped, with its file, not quietly counted as unchanged
+    assert second["skipped"] == 1
+    assert second["unchanged"] == 0
+    assert len(second["skipped_on_disk"]) == 1
+
+
+def test_skip_sensitive_reanalyses_when_settings_change(tmp_path):
+    """The remembered skip applies to the settings it was made under"""
+    engine, export_file = _skip_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-skip-004", body="mail alice@example.com")
+    _sync_with_analysis(engine, export_file, conv, _flagged())
+    _sync_with_analysis(engine, export_file, conv, _flagged(), skip_sensitive=True)
+
+    engine.pii_detector.config.pii.risk_threshold = "high"
+    _, analyze = _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True
+    )
+
+    assert analyze.call_count == 1
+
+
+def test_skip_sensitive_dry_run_does_not_record_the_skip(tmp_path):
+    engine, export_file = _skip_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-skip-005", body="mail alice@example.com")
+    _sync_with_analysis(engine, export_file, conv, _flagged())
+
+    _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True, dry_run=True
+    )
+    _, analyze = _sync_with_analysis(
+        engine, export_file, conv, _flagged(), skip_sensitive=True
+    )
+
+    assert analyze.call_count == 1

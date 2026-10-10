@@ -235,6 +235,21 @@ def sync(
 
     console.print(table)
 
+    # skip_sensitive does not touch files written before the skip
+    if result.get("skipped_on_disk"):
+        console.print(
+            "\n[yellow]⚠ Skipped as sensitive, but already in your vault "
+            "(not removed):[/yellow]"
+        )
+        for path in result["skipped_on_disk"][:10]:
+            console.print(f"  [yellow]•[/yellow] {path}")
+        remaining = len(result["skipped_on_disk"]) - 10
+        if remaining > 0:
+            console.print(f"  [dim]… and {remaining} more[/dim]")
+        console.print(
+            "[dim]  Delete or move these files yourself if they should not stay.[/dim]"
+        )
+
     # Show details for dry-run or if there are changes
     if dry_run and (
         result["new"] > 0
