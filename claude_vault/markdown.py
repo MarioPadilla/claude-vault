@@ -82,6 +82,11 @@ uuid: {uuid}
             ]
             post["related_tags"] = {r["title"]: r["common_tags"] for r in related_convs}
 
+        if conversation.pii_scanned:
+            post["pii_scanned"] = True
+            post["pii_detector"] = conversation.pii_detector
+            post["pii_llm"] = conversation.pii_llm_used
+
         if conversation.pii_detected:
             post["pii_detected"] = True
             post["risk_level"] = conversation.risk_level

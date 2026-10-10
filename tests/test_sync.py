@@ -613,3 +613,95 @@ def test_sync_rescans_when_the_pii_detector_changed(tmp_path):
     assert mock_analyze.call_count == 2
     assert second["reanalyzed"] == 1
     assert second["unchanged"] == 0
+
+
+def _read_frontmatter(tmp_path):
+    import frontmatter
+
+    files = list((tmp_path / "conversations").glob("*.md"))
+    assert len(files) == 1
+    return frontmatter.load(files[0])
+
+
+def test_scanned_clean_conversation_is_marked_as_scanned(tmp_path):
+    """'Scanned and clean' and 'never scanned' used to look identical on disk, since
+    only a positive detection wrote anything. A reader (such as an MCP server)
+    cannot treat 'unknown' as safe, so it has to be able to tell them apart."""
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-marker-001")
+
+    _sync_with_analysis(
+        engine, export_file, conv, _analysed(llm_used=True), detect_pii=True
+    )
+
+    post = _read_frontmatter(tmp_path)
+    assert post["pii_scanned"] is True
+    assert post["pii_detector"] == engine.pii_detector.version
+    assert post["pii_llm"] is True
+    assert "pii_detected" not in post.metadata
+
+
+def test_unscanned_conversation_has_no_scan_marker(tmp_path):
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-marker-002")
+
+    with patch.object(engine.parser, "parse", return_value=[conv]):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            engine.sync(export_file)
+
+    post = _read_frontmatter(tmp_path)
+    assert "pii_scanned" not in post.metadata
+    assert "pii_detector" not in post.metadata
+
+
+def test_scan_marker_records_whether_the_llm_took_part(tmp_path):
+    """A regex-only scan (Ollama down) is weaker, and the reader should know"""
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-marker-003")
+
+    _sync_with_analysis(
+        engine, export_file, conv, _analysed(llm_used=False), detect_pii=True
+    )
+
+    assert _read_frontmatter(tmp_path)["pii_llm"] is False
+
+
+def test_scan_marker_is_written_next_to_a_detection(tmp_path):
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv(
+        "Deploy notes", "conv-marker-004", body="mail alice@example.com"
+    )
+
+    _sync_with_analysis(engine, export_file, conv, _flagged(), detect_pii=True)
+
+    post = _read_frontmatter(tmp_path)
+    assert post["pii_scanned"] is True
+    assert post["pii_detected"] is True
+    assert post["risk_level"] == "high"
+
+
+def test_conversation_scanned_by_an_older_detector_is_scanned_again(tmp_path):
+    """Files written before the marker existed have none, and DETECTOR_REVISION was
+    bumped for that, so the next PII-enabled sync adds it"""
+    engine, export_file = _redaction_engine(tmp_path)
+    conv = _titled_conv("Deploy notes", "conv-marker-005")
+    _sync_with_analysis(engine, export_file, conv, _analysed(), detect_pii=True)
+    engine.state.save_conversation(
+        conv.id,
+        next((tmp_path / "conversations").glob("*.md"))
+        .relative_to(tmp_path)
+        .as_posix(),
+        conv.content_hash(),
+        {"title": conv.title, "pii_fingerprint": "from-an-older-detector"},
+    )
+
+    second, _ = _sync_with_analysis(
+        engine, export_file, conv, _analysed(), detect_pii=True
+    )
+
+    assert second["reanalyzed"] == 1
+    assert _read_frontmatter(tmp_path)["pii_scanned"] is True

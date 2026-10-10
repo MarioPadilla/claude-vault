@@ -26,6 +26,11 @@ class Conversation(BaseModel):
     tags: List[str] = Field(default_factory=list)
     summary: Optional[str] = None
     # PII / sensitive-content metadata (populated during sync when --detect-pii is used)
+    # pii_scanned separates "scanned and clean" from "never scanned", which look the
+    # same when only pii_detected is written
+    pii_scanned: bool = False
+    pii_detector: Optional[str] = None  # PIIDetector.version that did the scan
+    pii_llm_used: bool = False  # False means regex only (LLM off or unavailable)
     pii_detected: bool = False
     risk_level: Optional[str] = None  # "none" | "low" | "medium" | "high"
     pii_types: List[str] = Field(default_factory=list)

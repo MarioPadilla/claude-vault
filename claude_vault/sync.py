@@ -180,6 +180,9 @@ class SyncEngine:
                         if pii_result.llm_used or not use_llm:
                             stored_fingerprint = pii_fingerprint
 
+                        conv.pii_scanned = True
+                        conv.pii_detector = self.pii_detector.version
+                        conv.pii_llm_used = pii_result.llm_used
                         conv.pii_detected = pii_result.detected
                         conv.risk_level = pii_result.risk_level
                         conv.pii_types = pii_result.pii_types

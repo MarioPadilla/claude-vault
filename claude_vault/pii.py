@@ -17,7 +17,7 @@ _RISK_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3}
 # Bump when detection logic changes in a way the patterns and risk table below do
 # not show: the validators, the span handling, or what text gets scanned. Changes
 # to the patterns themselves are picked up automatically by PIIDetector.version.
-DETECTOR_REVISION = 1
+DETECTOR_REVISION = 2  # 2: scan results are written to the frontmatter
 
 
 def _luhn_valid(candidate: str) -> bool:

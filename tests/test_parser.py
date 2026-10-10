@@ -45,3 +45,33 @@ def test_basic_parsing():
 
 if __name__ == "__main__":
     test_basic_parsing()
+
+
+def test_markdown_writes_scan_marker_only_when_scanned():
+    from datetime import datetime
+
+    from claude_vault.markdown import MarkdownGenerator
+    from claude_vault.models import Conversation, Message
+
+    def make(**extra):
+        return Conversation(
+            id="c1",
+            title="T",
+            messages=[Message(role="human", content="hi")],
+            created_at=datetime(2024, 1, 1),
+            updated_at=datetime(2024, 1, 1),
+            **extra,
+        )
+
+    generator = MarkdownGenerator()
+
+    plain = generator.generate(make())
+    assert "pii_scanned" not in plain
+
+    scanned = generator.generate(
+        make(pii_scanned=True, pii_detector="abc123", pii_llm_used=True)
+    )
+    assert "pii_scanned: true" in scanned
+    assert "pii_detector: abc123" in scanned
+    assert "pii_llm: true" in scanned
+    assert "pii_detected" not in scanned
