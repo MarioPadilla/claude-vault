@@ -8,10 +8,17 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.9", "3.10", "3.11"]
+        include:
+          # Windows has its own encoding, process and path behavior; two of the
+          # bugs in #35 only showed up there. One version keeps the run short.
+          - os: windows-latest
+            python-version: "3.11"
 
     steps:
       - uses: actions/checkout@v3
