@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.9](https://github.com/MarioPadilla/claude-vault/compare/v0.8.8...v0.8.9) (2026-10-10)
+
+
+### Bug Fixes
+
+* **sync:** skip unchanged conversations already processed under the same PII settings ([#40](https://github.com/MarioPadilla/claude-vault/issues/40)) ([99e3194](https://github.com/MarioPadilla/claude-vault/commit/99e319457dcc825fd9a5f1e5af7fe32b84e40d6c)), closes [#34](https://github.com/MarioPadilla/claude-vault/issues/34)
+
 ## [0.8.8](https://github.com/MarioPadilla/claude-vault/compare/v0.8.7...v0.8.8) (2026-10-10)
 
 
