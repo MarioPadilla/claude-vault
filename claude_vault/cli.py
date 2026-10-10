@@ -655,7 +655,7 @@ def retag(
                         post["summary"] = metadata["summary"]
 
                     # Save updated file
-                    md_file.write_text(frontmatter.dumps(post))
+                    md_file.write_text(frontmatter.dumps(post), encoding="utf-8")
                     updated += 1
 
                     summary_preview = (
