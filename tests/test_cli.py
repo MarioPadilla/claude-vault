@@ -239,3 +239,69 @@ def test_watch_stop_does_not_signal_an_invalid_recorded_pid(tmp_path, recorded_p
         assert result.exit_code == 0
         mock_kill.assert_not_called()
         assert "No valid watch process id" in result.stdout
+
+
+def test_init_mentions_pii_scanning(tmp_path):
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(app, ["init"])
+
+        assert result.exit_code == 0
+        assert "pasted secrets" in result.stdout
+        assert "--detect-pii" in result.stdout
+
+
+def _sync_export(tmp_path, *extra_args):
+    """Sync a one-conversation export in a fresh vault, with config.pii untouched"""
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+        export_file = Path("conversations.json")
+        export_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "uuid": "c1",
+                        "name": "Chat",
+                        "created_at": "2024-01-01T00:00:00Z",
+                        "updated_at": "2024-01-01T00:00:00Z",
+                        "chat_messages": [
+                            {
+                                "uuid": "m1",
+                                "sender": "human",
+                                "text": "hello",
+                                "created_at": "2024-01-01T00:00:00Z",
+                            },
+                            {
+                                "uuid": "m2",
+                                "sender": "assistant",
+                                "text": "hi",
+                                "created_at": "2024-01-01T00:00:01Z",
+                            },
+                        ],
+                    }
+                ]
+            )
+        )
+        with patch("claude_vault.cli.load_config", return_value=Config()):
+            return runner.invoke(app, ["sync", str(export_file), *extra_args])
+
+
+def test_sync_says_when_files_were_written_without_a_pii_scan(tmp_path):
+    result = _sync_export(tmp_path)
+
+    assert result.exit_code == 0
+    assert "written without a PII scan" in result.stdout
+    assert "rotate it" in result.stdout
+
+
+def test_sync_does_not_warn_when_pii_scanning_is_on(tmp_path):
+    result = _sync_export(tmp_path, "--detect-pii")
+
+    assert result.exit_code == 0
+    assert "written without a PII scan" not in result.stdout
+
+
+def test_sync_dry_run_does_not_warn_about_unscanned_files(tmp_path):
+    result = _sync_export(tmp_path, "--dry-run")
+
+    assert result.exit_code == 0
+    assert "written without a PII scan" not in result.stdout
