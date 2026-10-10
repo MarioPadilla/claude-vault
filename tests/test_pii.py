@@ -329,3 +329,132 @@ def test_analyze_marks_llm_used_only_when_llm_answered(detector):
     with patch("requests.get", side_effect=Exception("down")):
         assert detector.analyze(conv, use_llm=True).llm_used is False
     assert detector.analyze(conv, use_llm=False).llm_used is False
+
+
+# ---------------------------------------------------------------------------
+# Precision – coding sessions are full of strings that only look like secrets
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "commit 99e319457dcc825fd9a5f1e5af7fe32b84e40d6c fixed it",
+        "sha256: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "session 3f2504e0-4f89-11d3-9a0c-0305e82c3301 started",
+        "call getUserAuthenticationTokenFromRequestHeader() here",
+        "const handleSubmitFormValidationAndRedirect = () => {}",
+        "timestamp 1700000000 and id 5551234567",
+        "max_tokens = 4096 and token_count: 1200",
+        "order 1234567890123456 shipped",
+        '{"file_path": "/Users/dev/repos/app/src/semantic_search_engine_module.py"}',
+    ],
+)
+def test_scan_ignores_lookalikes_common_in_code(detector, text):
+    result = detector.scan(text)
+    assert not result.detected, result.pii_types
+
+
+# ---------------------------------------------------------------------------
+# Recall – secrets that previously slipped through
+# ---------------------------------------------------------------------------
+
+
+def _fake(prefix: str, body: str) -> str:
+    """Join a provider prefix and a made-up body at runtime.
+
+    These are fixtures, not credentials. Built in two parts so no complete
+    token-shaped literal sits in the source for secret scanners to flag.
+    """
+    return prefix + body
+
+
+@pytest.mark.parametrize(
+    "text, expected_type",
+    [
+        (
+            "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "credential_context",
+        ),
+        ("AKIAIOSFODNN7EXAMPLE", "api_key"),
+        (
+            _fake("xoxb-", "123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx"),
+            "api_key",
+        ),
+        (_fake("sk_live_", "51H8abcdefghijklmnopqrstuv"), "api_key"),
+        ("sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH", "api_key"),
+        ("ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789", "api_key"),
+        ("Authorization: Bearer abc123def456ghi789xyz", "api_key"),
+        (
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+            "jwt",
+        ),
+        ("postgres://admin:hunter2@db.internal:5432/prod", "connection_string"),
+        ("-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA", "private_key"),
+        ("key is Zk3Jq9XvB2mN7pLw4RtY8uHc1VsD6fGa5E", "secret_token"),
+    ],
+)
+def test_scan_detects_common_secret_formats(detector, text, expected_type):
+    result = detector.scan(text)
+    assert expected_type in result.pii_types, result.pii_types
+    assert result.detected
+
+
+def test_scan_connection_string_password_is_not_reported_as_email(detector):
+    result = detector.scan("postgres://admin:hunter2@db.internal:5432/prod")
+    assert "email" not in result.pii_types
+
+
+def test_scan_credit_card_requires_valid_checksum(detector):
+    assert "credit_card" in detector.scan("card 4111 1111 1111 1111").pii_types
+    assert "credit_card" not in detector.scan("id 1234 5678 9012 3456").pii_types
+
+
+def test_scan_phone_requires_formatting(detector):
+    assert "phone" in detector.scan("call 555-867-5309").pii_types
+    assert "phone" in detector.scan("call +1 (555) 123-4567").pii_types
+    assert "phone" not in detector.scan("id 5558675309").pii_types
+
+
+def test_scan_reports_the_full_matched_secret(detector):
+    """matches feeds redaction, so it must hold the whole value, not a group"""
+    result = detector.scan("token ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789 here")
+    assert result.matches["api_key"] == ["ghp_aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789"]
+
+
+# ---------------------------------------------------------------------------
+# Redaction of the new types
+# ---------------------------------------------------------------------------
+
+
+def test_redact_removes_secrets_and_keeps_lookalikes(detector):
+    sha = "99e319457dcc825fd9a5f1e5af7fe32b84e40d6c"
+    text = (
+        f"commit {sha}\n"
+        "curl -H 'Authorization: Bearer abc123def456ghi789xyz'\n"
+        "DATABASE_URL=postgres://admin:hunter2@db.internal/prod\n"
+        "AKIAIOSFODNN7EXAMPLE"
+    )
+    redacted = detector.redact(text)
+
+    assert sha in redacted
+    assert "abc123def456ghi789xyz" not in redacted
+    assert "hunter2" not in redacted
+    assert "AKIAIOSFODNN7EXAMPLE" not in redacted
+
+
+def test_redact_removes_whole_private_key_block(detector):
+    text = (
+        "before\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkq\nabcdef==\n"
+        "-----END PRIVATE KEY-----\nafter"
+    )
+    redacted = detector.redact(text)
+
+    assert "MIIEvQIBADANBgkq" not in redacted
+    assert "[REDACTED-PRIVATE-KEY]" in redacted
+    assert redacted.startswith("before") and redacted.endswith("after")
+
+
+def test_redact_removes_truncated_private_key_to_end_of_text(detector):
+    redacted = detector.redact("x\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkq")
+    assert "MIIEvQIBADANBgkq" not in redacted
