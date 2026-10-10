@@ -2,6 +2,7 @@
 
 import os
 import signal
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -21,6 +22,55 @@ from claude_vault.state import StateManager
 from claude_vault.sync import SyncEngine
 
 console = Console()
+
+
+def _pid_is_alive_windows(pid: int) -> bool:
+    """Windows liveness check via the Win32 API (no signal is sent)"""
+    if sys.platform != "win32":
+        raise OSError("Win32 API is only available on Windows")
+
+    import ctypes
+    from ctypes import wintypes
+
+    synchronize = 0x00100000
+    wait_timeout = 0x00000102
+    error_access_denied = 5
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        # Access denied means the process exists but belongs to someone else
+        return bool(ctypes.get_last_error() == error_access_denied)
+    try:
+        # A running process is unsignalled, so a zero-timeout wait times out
+        return bool(kernel32.WaitForSingleObject(handle, 0) == wait_timeout)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _pid_is_alive(pid: int) -> bool:
+    """Return True if a process with this PID is running.
+
+    os.kill(pid, 0) is the POSIX liveness probe, but on Windows any signal other
+    than CTRL_C_EVENT/CTRL_BREAK_EVENT terminates the target process.
+    """
+    if sys.platform == "win32":
+        return _pid_is_alive_windows(pid)
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Process exists but we can't access it
+        return True
+    return True
 
 
 class SyncQueue:
@@ -355,16 +405,17 @@ class WatchManager:
 
         try:
             pid = int(self.pid_file.read_text().strip())
-            # Check if process exists
-            os.kill(pid, 0)
-            return True
-        except (ProcessLookupError, ValueError):
-            # Stale PID file
-            self.pid_file.unlink()
+        except (ValueError, OSError):
+            # Unreadable or corrupt PID file
+            self.pid_file.unlink(missing_ok=True)
             return False
-        except PermissionError:
-            # Process exists but we can't access it
+
+        if _pid_is_alive(pid):
             return True
+
+        # Stale PID file
+        self.pid_file.unlink(missing_ok=True)
+        return False
 
     def _write_pid_file(self):
         """Write PID file"""
