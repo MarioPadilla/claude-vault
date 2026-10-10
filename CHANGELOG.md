@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/MarioPadilla/claude-vault/compare/v0.8.11...v0.9.0) (2026-10-10)
+
+
+### Features
+
+* **pii:** mark scanned conversations in the frontmatter ([#51](https://github.com/MarioPadilla/claude-vault/issues/51)) ([12dee31](https://github.com/MarioPadilla/claude-vault/commit/12dee31474be2a533629dccf4b64fa09436eee9c))
+* **pii:** warn when files are written without a PII scan, document defaults and limits ([#53](https://github.com/MarioPadilla/claude-vault/issues/53)) ([29ecb4e](https://github.com/MarioPadilla/claude-vault/commit/29ecb4e2d7225656ff46b0ac9851ec986c682ba9))
+
 ## [0.8.11](https://github.com/MarioPadilla/claude-vault/compare/v0.8.10...v0.8.11) (2026-10-10)
 
 
