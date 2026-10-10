@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.8](https://github.com/MarioPadilla/claude-vault/compare/v0.8.7...v0.8.8) (2026-10-10)
+
+
+### Bug Fixes
+
+* **retag:** write UTF-8 explicitly to prevent file truncation on Windows ([#36](https://github.com/MarioPadilla/claude-vault/issues/36)) ([c9cfeeb](https://github.com/MarioPadilla/claude-vault/commit/c9cfeeb9dd6f5b20ccc761591601fcd1a328b196)), closes [#35](https://github.com/MarioPadilla/claude-vault/issues/35)
+* **sync:** honor config.pii settings in sync and watch ([#39](https://github.com/MarioPadilla/claude-vault/issues/39)) ([ab43d0c](https://github.com/MarioPadilla/claude-vault/commit/ab43d0cd1b5425900e5a053956e3bdf6c82df688)), closes [#35](https://github.com/MarioPadilla/claude-vault/issues/35)
+* **watcher:** use platform-aware PID liveness check to avoid killing processes on Windows ([#37](https://github.com/MarioPadilla/claude-vault/issues/37)) ([308aa34](https://github.com/MarioPadilla/claude-vault/commit/308aa3416fff462985ab64256ad1bcef201fd5c0)), closes [#35](https://github.com/MarioPadilla/claude-vault/issues/35)
+
 ## [0.8.7](https://github.com/MarioPadilla/claude-vault/compare/v0.8.6...v0.8.7) (2026-06-29)
 
 
