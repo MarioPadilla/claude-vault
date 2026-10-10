@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.10](https://github.com/MarioPadilla/claude-vault/compare/v0.8.9...v0.8.10) (2026-10-10)
+
+
+### Bug Fixes
+
+* **pii:** cut false positives on code and catch common secret formats ([#43](https://github.com/MarioPadilla/claude-vault/issues/43)) ([0d742ab](https://github.com/MarioPadilla/claude-vault/commit/0d742ab7eae6063e2dd15488aeaf1c9ee4974e72))
+
 ## [0.8.9](https://github.com/MarioPadilla/claude-vault/compare/v0.8.8...v0.8.9) (2026-10-10)
 
 
