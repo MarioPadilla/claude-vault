@@ -156,3 +156,65 @@ def test_sync_auto_detects_loose_jsonl_dir(tmp_path):
         (source_dir / "session1.jsonl").touch()
         result = runner.invoke(app, ["sync", str(source_dir), "--dry-run"])
         assert result.exit_code == 0
+
+
+def _run_sync_with_pii_config(tmp_path, pii_config, extra_args=()):
+    """Run `sync` against a stubbed engine and return the kwargs it received"""
+    config = Config()
+    config.pii = pii_config
+
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        runner.invoke(app, ["init"])
+        export_file = Path("conversations.json")
+        export_file.write_text("[]")
+
+        with patch("claude_vault.cli.load_config", return_value=config):
+            with patch("claude_vault.cli.SyncEngine") as mock_engine_cls:
+                mock_engine_cls.return_value.sync.return_value = {
+                    "new": 0,
+                    "updated": 0,
+                    "recreated": 0,
+                    "unchanged": 0,
+                    "errors": 0,
+                    "details": [],
+                }
+                result = runner.invoke(app, ["sync", str(export_file), *extra_args])
+
+        assert result.exit_code == 0, result.stdout
+        return mock_engine_cls.return_value.sync.call_args.kwargs
+
+
+def test_sync_applies_pii_settings_from_config(tmp_path):
+    """Regression test: config.pii must apply without any CLI flags"""
+    from claude_vault.config import PIIConfig
+
+    kwargs = _run_sync_with_pii_config(
+        tmp_path, PIIConfig(enabled=True, redact=True, skip_sensitive=True)
+    )
+
+    assert kwargs["detect_pii"] is True
+    assert kwargs["redact_pii"] is True
+    assert kwargs["skip_sensitive"] is True
+
+
+def test_sync_pii_defaults_off_without_config_or_flags(tmp_path):
+    """No config and no flags must leave PII handling off"""
+    from claude_vault.config import PIIConfig
+
+    kwargs = _run_sync_with_pii_config(tmp_path, PIIConfig())
+
+    assert kwargs["detect_pii"] is False
+    assert kwargs["redact_pii"] is False
+    assert kwargs["skip_sensitive"] is False
+
+
+def test_sync_cli_flag_enables_pii_when_config_is_off(tmp_path):
+    """An explicit flag still enables PII for a single run"""
+    from claude_vault.config import PIIConfig
+
+    kwargs = _run_sync_with_pii_config(
+        tmp_path, PIIConfig(), extra_args=["--redact-pii"]
+    )
+
+    assert kwargs["redact_pii"] is True
+    assert kwargs["detect_pii"] is False

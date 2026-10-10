@@ -168,6 +168,12 @@ def sync(
     engine = SyncEngine(vault_path)
     engine.parser = parser
 
+    # config.pii supplies the defaults, an explicit flag can still enable per run
+    pii_config = load_config().pii
+    detect_pii = detect_pii or pii_config.enabled
+    redact_pii = redact_pii or pii_config.redact
+    skip_sensitive = skip_sensitive or pii_config.skip_sensitive
+
     # PII detection notices
     if detect_pii or redact_pii or skip_sensitive:
         console.print("[blue]🔒 PII detection enabled[/blue]")

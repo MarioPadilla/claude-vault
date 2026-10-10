@@ -461,11 +461,48 @@ def test_watch_manager_execute_sync_success(temp_vault):
                 test_file = temp_vault / "test.json"
                 manager._execute_sync(test_file)
 
-                # Should call sync engine
-                mock_sync.sync.assert_called_once_with(test_file)
+                # Should call sync engine, with PII settings taken from config
+                mock_sync.sync.assert_called_once_with(
+                    test_file,
+                    detect_pii=mock_config.return_value.pii.enabled,
+                    redact_pii=mock_config.return_value.pii.redact,
+                    skip_sensitive=mock_config.return_value.pii.skip_sensitive,
+                )
 
                 # Should update state
                 assert mock_state.save_watch_state.called
+
+
+def test_watch_manager_execute_sync_honors_pii_config(temp_vault):
+    """Regression test: watch must apply config.pii, it has no CLI flags"""
+    with patch("claude_vault.watcher.StateManager") as mock_state_class:
+        with patch("claude_vault.watcher.SyncEngine") as mock_sync_class:
+            with patch("claude_vault.watcher.load_config") as mock_config:
+                mock_config.return_value.watch.debounce_seconds = 2.0
+                mock_config.return_value.watch.throttle_seconds = 10.0
+                mock_config.return_value.pii.enabled = True
+                mock_config.return_value.pii.redact = True
+                mock_config.return_value.pii.skip_sensitive = False
+
+                mock_state = Mock()
+                mock_state.get_watch_state.return_value = {"total_syncs": 0}
+                mock_state_class.return_value = mock_state
+
+                mock_sync = Mock()
+                mock_sync.sync.return_value = {"new": 0, "updated": 0}
+                mock_sync_class.return_value = mock_sync
+
+                manager = WatchManager(temp_vault)
+
+                test_file = temp_vault / "test.json"
+                manager._execute_sync(test_file)
+
+                mock_sync.sync.assert_called_once_with(
+                    test_file,
+                    detect_pii=True,
+                    redact_pii=True,
+                    skip_sensitive=False,
+                )
 
 
 def test_watch_manager_execute_sync_error_handling(temp_vault):
