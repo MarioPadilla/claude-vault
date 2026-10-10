@@ -257,6 +257,7 @@ class SyncEngine:
 
                         if not dry_run:
                             self.markdown_gen.save(conv, file_path)
+                            self._invalidate_embeddings(conv.id)
                             self.state.save_conversation(
                                 conv.id,
                                 str(file_path.relative_to(self.vault_path)),
@@ -287,6 +288,7 @@ class SyncEngine:
 
                             if not dry_run:
                                 self.markdown_gen.save(conv, file_path, related_convs)
+                                self._invalidate_embeddings(conv.id)
                                 self.state.save_conversation(
                                     conv.id,
                                     str(file_path.relative_to(self.vault_path)),
@@ -319,6 +321,7 @@ class SyncEngine:
 
                             if not dry_run:
                                 self.markdown_gen.save(conv, file_path, related_convs)
+                                self._invalidate_embeddings(conv.id)
                                 self.state.save_conversation(
                                     conv.id,
                                     str(file_path.relative_to(self.vault_path)),
@@ -369,6 +372,16 @@ class SyncEngine:
 
         filename = f"{date_str}-{safe_title}.md"
         return self.conversations_dir / filename
+
+    def _invalidate_embeddings(self, conversation_id: str) -> None:
+        """Drop the search index entries built from a file that was just rewritten.
+
+        The embeddings table keeps a copy of each chunk's text, and search shows it.
+        Without this, redacting a vault (or any change to a conversation) left the
+        old, unredacted text in state.db. Search regenerates them from the current
+        file the next time it runs.
+        """
+        self.state.delete_embeddings_for_conversation(conversation_id)
 
     def _existing_file(self, existing: Optional[Dict]) -> Optional[Path]:
         """The vault file already written for a conversation, if there is one"""
