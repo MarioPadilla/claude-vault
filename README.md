@@ -14,7 +14,7 @@ That's it. Your conversations are now in `conversations/` as Markdown files.
 
 ## Installation
 
-**Requirements:** Python 3.8+, optional: [Ollama](https://ollama.ai) for AI tagging and semantic search.
+**Requirements:** Python 3.9+, optional: [Ollama](https://ollama.ai) for AI tagging and semantic search.
 
 ```bash
 git clone https://github.com/MarioPadilla/claude-vault.git
@@ -96,9 +96,19 @@ claude-vault watch-stop
 
 Scan conversations for personal or confidential data before they are written to disk.
 
-**Detected patterns:** emails, phone numbers, SSNs, credit card numbers, API keys, IP addresses, credential contexts (`password:`, `token:`, etc.). If Ollama is running, an LLM pass also classifies broader sensitive content.
+> **Off by default.** Without `--detect-pii` (or `pii.enabled` in the config) nothing is scanned, and a sync writes your conversations exactly as they are, including any password or API key you pasted into a chat. `sync` tells you when it wrote files without a scan. This matters most if your vault lives in a synced folder (Drive, iCloud, Dropbox).
 
-**Risk levels:** `high` (SSN / credit card / API key), `medium` (email / phone), `low` (IP / credential context).
+**What it looks for:**
+
+- Provider tokens: Anthropic, OpenAI, GitHub, GitLab, Google, AWS, Slack, Stripe, Hugging Face, npm, SendGrid
+- JWTs, `Authorization: Bearer/Basic` headers, private key blocks, and connection strings with a password
+- `name = value` credentials (`password:`, `api_key=`, `AWS_SECRET_ACCESS_KEY=`...), and long random-looking tokens
+- Emails, phone numbers, SSNs (US format), credit card numbers (checksum-validated), IP addresses
+- If Ollama is running, an LLM pass also classifies broader sensitive content
+
+It is built for coding sessions: git SHAs, hashes, UUIDs, identifiers and token counts are not flagged.
+
+**Risk levels:** `high` (SSN, card, provider token, JWT, private key, connection string), `medium` (email, phone, random token), `low` (IP, credential context).
 
 ```bash
 # Tag conversations that contain PII (adds pii-* tags + frontmatter fields)
@@ -124,6 +134,18 @@ To make these behaviours permanent, set them in `~/.claude-vault/config.json`:
   }
 }
 ```
+
+If the config file cannot be read (invalid JSON, wrong value), Claude Vault warns and falls back to the defaults, which means PII handling is **off**.
+
+**What scanned files look like.** Every conversation that went through the scan carries `pii_scanned: true`, `pii_detector` (the detector version) and `pii_llm` (`false` when only the regex pass ran, for example because Ollama was down). A conversation with none of these was never scanned: treat it as unknown, not as clean. Findings add `pii_detected`, `risk_level` and `pii_types`. When the detector improves, the next PII-enabled sync scans each conversation once more.
+
+**Limits to know about**
+
+- **Redacting the vault does not undo a leak.** A key that appeared in a chat was already sent to the model provider. If a real credential shows up, rotate it.
+- **Your source data is untouched.** Claude Code keeps plaintext transcripts in `~/.claude/projects/`. Claude Vault only controls what it writes into your vault; it does not clean those files.
+- **`--skip-sensitive` does not remove files that already exist.** It keeps new sensitive conversations out. If a file was written before, sync lists it ("already in your vault, not removed") and leaves it for you to delete or move.
+- **Detection is pattern matching plus an optional LLM, not a guarantee.** It misses secrets that have no recognisable format (for example a bare hex key), and it can flag harmless text. Review a vault before sharing it.
+- Redaction covers message text, titles and summaries. A file that already exists keeps its old filename on re-sync.
 
 ### Other commands
 

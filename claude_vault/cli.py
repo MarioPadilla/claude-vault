@@ -82,6 +82,10 @@ def init(vault_path: Optional[Path] = None):
     console.print("\n[blue]Next steps:[/blue]")
     console.print("  1. Export your Claude conversations (conversations.json)")
     console.print("  2. Run: claude-vault sync path/to/conversations.json")
+    console.print(
+        "\n[dim]Conversations can contain pasted secrets. Add --detect-pii (or set "
+        "pii.enabled in the config) to scan them; see the README.[/dim]"
+    )
 
 
 @app.command()
@@ -234,6 +238,20 @@ def sync(
         table.add_row("Errors", f"[red]{result['errors']}[/red]")
 
     console.print(table)
+
+    # Files were written and nothing looked at them for secrets: say so once per run
+    written = result["new"] + result["updated"] + result["recreated"]
+    if written > 0 and not dry_run and not (detect_pii or redact_pii or skip_sensitive):
+        console.print(
+            f"\n[yellow]ℹ {written} conversation(s) were written without a PII "
+            "scan.[/yellow]"
+        )
+        console.print(
+            "[dim]  They may contain pasted passwords or API keys. Re-run with "
+            "--detect-pii --redact-pii, or set pii.enabled in the config.\n"
+            "  Redacting the vault does not revoke a key that was already shared: "
+            "rotate it.[/dim]"
+        )
 
     # skip_sensitive does not touch files written before the skip
     if result.get("skipped_on_disk"):
