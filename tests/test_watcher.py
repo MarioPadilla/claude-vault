@@ -14,6 +14,7 @@ from claude_vault.watcher import (
     SyncQueue,
     WatchManager,
     _pid_is_alive,
+    is_valid_pid,
 )
 
 
@@ -531,3 +532,42 @@ def test_watch_manager_execute_sync_error_handling(temp_vault):
 
                     # Should track error
                     assert manager.error_counts[str(test_file)] == 1
+
+
+@pytest.mark.parametrize("pid", [1, 4, 12345, 2**31 - 1])
+def test_is_valid_pid_accepts_real_pids(pid):
+    assert is_valid_pid(pid)
+
+
+@pytest.mark.parametrize(
+    "pid", [0, -1, -12345, 2**31, 99999999999999999999, None, "123", 1.5, True]
+)
+def test_is_valid_pid_rejects_everything_else(pid):
+    """0 and -1 make os.kill address a whole process group or every process, and
+    an over-large number raises OverflowError"""
+    assert not is_valid_pid(pid)
+
+
+@pytest.mark.parametrize("pid", [0, -1, 99999999999999999999])
+def test_pid_is_alive_never_probes_an_invalid_pid(pid):
+    with patch("claude_vault.watcher.os.kill") as mock_kill:
+        assert _pid_is_alive(pid) is False
+    mock_kill.assert_not_called()
+
+
+@pytest.mark.parametrize("content", ["0", "-1", "99999999999999999999"])
+def test_watch_manager_is_running_clears_invalid_pid_file(temp_vault, content):
+    """A PID file with 0/-1 used to report 'running' forever, and a huge number
+    crashed watch and watch-status with an unhandled OverflowError"""
+    with patch("claude_vault.watcher.StateManager"):
+        with patch("claude_vault.watcher.SyncEngine"):
+            with patch("claude_vault.watcher.load_config") as mock_config:
+                mock_config.return_value.watch.debounce_seconds = 2.0
+                mock_config.return_value.watch.throttle_seconds = 10.0
+
+                manager = WatchManager(temp_vault)
+                manager.pid_file.parent.mkdir(parents=True, exist_ok=True)
+                manager.pid_file.write_text(content)
+
+                assert manager._is_running() is False
+                assert not manager.pid_file.exists()

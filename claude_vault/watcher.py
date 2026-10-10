@@ -54,12 +54,29 @@ def _pid_is_alive_windows(pid: int) -> bool:
         kernel32.CloseHandle(handle)
 
 
+# Largest PID any supported platform can hand out (pid_t is a signed 32-bit int)
+_MAX_PID = 2**31 - 1
+
+
+def is_valid_pid(pid: object) -> bool:
+    """True for something that can be the PID of one process.
+
+    os.kill treats 0 as the caller's process group and -1 as every process the
+    user may signal, so those must never be treated as a PID, and a number too
+    large for the C type raises OverflowError instead of answering.
+    """
+    return isinstance(pid, int) and not isinstance(pid, bool) and 0 < pid <= _MAX_PID
+
+
 def _pid_is_alive(pid: int) -> bool:
     """Return True if a process with this PID is running.
 
     os.kill(pid, 0) is the POSIX liveness probe, but on Windows any signal other
     than CTRL_C_EVENT/CTRL_BREAK_EVENT terminates the target process.
     """
+    if not is_valid_pid(pid):
+        return False
+
     if sys.platform == "win32":
         return _pid_is_alive_windows(pid)
 

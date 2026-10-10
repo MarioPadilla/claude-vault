@@ -890,6 +890,21 @@ def watch_stop(vault_path: Optional[Path] = None):
     import os
     import signal
 
+    from .watcher import is_valid_pid
+
+    # The PID comes from the state DB. 0 and -1 would signal a whole process group
+    # or every process of the user, and a missing one would crash, so check first
+    if not is_valid_pid(status["pid"]):
+        console.print(
+            f"[yellow]⚠ No valid watch process id recorded ({status['pid']!r}), "
+            "not sending a signal[/yellow]"
+        )
+        state = StateManager(vault_path)
+        watch_state = state.get_watch_state()
+        watch_state["is_running"] = False
+        state.save_watch_state(watch_state)
+        return
+
     try:
         os.kill(status["pid"], signal.SIGTERM)
         console.print("[green]✓ Sent stop signal to watch process[/green]")
