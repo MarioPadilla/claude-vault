@@ -305,3 +305,97 @@ def test_sync_dry_run_does_not_warn_about_unscanned_files(tmp_path):
 
     assert result.exit_code == 0
     assert "written without a PII scan" not in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# verify – files that exist but were cut short
+# ---------------------------------------------------------------------------
+
+
+def _synced_vault(tmp_path, messages=4):
+    """Init a vault in the cwd and sync one conversation; returns its markdown file"""
+    runner.invoke(app, ["init"])
+    export_file = Path("conversations.json")
+    export_file.write_text(
+        json.dumps(
+            [
+                {
+                    "uuid": "c1",
+                    "name": "Excel Spreadsheet Connection",
+                    "created_at": "2025-06-03T00:00:00Z",
+                    "updated_at": "2025-06-03T00:00:00Z",
+                    "chat_messages": [
+                        {
+                            "uuid": f"m{i}",
+                            "sender": "human" if i % 2 == 0 else "assistant",
+                            "text": f"message number {i} with some text",
+                            "created_at": "2025-06-03T00:00:00Z",
+                        }
+                        for i in range(messages)
+                    ],
+                }
+            ]
+        )
+    )
+    with patch("claude_vault.cli.load_config", return_value=Config()):
+        runner.invoke(app, ["sync", str(export_file)])
+    return next(Path("conversations").glob("*.md"))
+
+
+def test_verify_passes_an_intact_vault(tmp_path):
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _synced_vault(tmp_path)
+
+        result = runner.invoke(app, ["verify"])
+
+        assert result.exit_code == 0
+        assert "verified successfully" in result.stdout
+
+
+def test_verify_detects_a_truncated_file(tmp_path):
+    """A failed write leaves the file in place but cut short. verify only checked
+    that it exists, so it reported success on a destroyed collection."""
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        md_file = _synced_vault(tmp_path)
+        md_file.write_bytes(md_file.read_bytes()[:220])
+
+        result = runner.invoke(app, ["verify"])
+
+        assert result.exit_code == 1
+        assert "damaged" in result.stdout
+        assert "verified successfully" not in result.stdout
+        assert md_file.name in result.stdout
+
+
+def test_verify_detects_an_empty_file(tmp_path):
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        md_file = _synced_vault(tmp_path)
+        md_file.write_text("")
+
+        result = runner.invoke(app, ["verify"])
+
+        assert result.exit_code == 1
+        assert "is empty" in result.stdout
+
+
+def test_verify_cleanup_does_not_remove_damaged_files(tmp_path):
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        md_file = _synced_vault(tmp_path)
+        md_file.write_text("")
+
+        result = runner.invoke(app, ["verify", "--cleanup"])
+
+        assert result.exit_code == 1
+        assert md_file.exists()
+        assert "does not touch them" in result.stdout
+
+
+def test_verify_still_cleans_up_missing_files(tmp_path):
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        md_file = _synced_vault(tmp_path)
+        md_file.unlink()
+
+        result = runner.invoke(app, ["verify", "--cleanup"])
+
+        assert result.exit_code == 0
+        assert "Cleaned up 1 orphaned" in result.stdout

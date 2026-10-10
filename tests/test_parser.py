@@ -75,3 +75,60 @@ def test_markdown_writes_scan_marker_only_when_scanned():
     assert "pii_detector: abc123" in scanned
     assert "pii_llm: true" in scanned
     assert "pii_detected" not in scanned
+
+
+def test_find_file_problem_classifies_files(tmp_path):
+    from datetime import datetime
+
+    from claude_vault.markdown import MarkdownGenerator, find_file_problem
+    from claude_vault.models import Conversation, Message
+
+    conv = Conversation(
+        id="abc-123",
+        title="Excel",
+        messages=[
+            Message(role="human", content="question"),
+            Message(role="assistant", content="answer"),
+            Message(role="user", content="thanks"),
+        ],
+        created_at=datetime(2025, 6, 3),
+        updated_at=datetime(2025, 6, 3),
+    )
+    full = MarkdownGenerator().generate(conv)
+
+    def check(text):
+        path = tmp_path / "x.md"
+        path.write_text(text, encoding="utf-8")
+        return find_file_problem(path)
+
+    assert check(full) is None
+    assert check("") == "is empty"
+    assert "holds 2 of 3 messages" in check(full[: full.index("answer")])
+    assert "holds 1 of 3 messages" in check(full[: full.index("🤖 Claude")])
+    assert "no conversation text" in check(full[: full.index("\n---\n", 5) + 5])
+    assert "no uuid" in check("---\ntitle: x\n---\n\n## 👤 You\n\nhi\n")
+
+
+def test_find_file_problem_accepts_older_files_without_message_count(tmp_path):
+    from claude_vault.markdown import find_file_problem
+
+    path = tmp_path / "old.md"
+    path.write_text(
+        "---\nuuid: abc\ntitle: T\n---\n\n## 👤 You\n\nhi\n", encoding="utf-8"
+    )
+
+    assert find_file_problem(path) is None
+
+
+def test_find_file_problem_counts_headings_with_timestamps(tmp_path):
+    from claude_vault.markdown import find_file_problem
+
+    path = tmp_path / "ts.md"
+    path.write_text(
+        "---\nuuid: abc\nmessage_count: 2\n---\n\n"
+        "## 👤 You *(2025-06-03 10:15)*\n\nhi\n\n---\n\n"
+        "## 🤖 Claude *(2025-06-03 10:16)*\n\nhello\n",
+        encoding="utf-8",
+    )
+
+    assert find_file_problem(path) is None

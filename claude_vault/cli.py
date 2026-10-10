@@ -10,6 +10,7 @@ from rich.table import Table
 
 from .code_parser import ClaudeCodeHistoryParser
 from .config import get_config_path, load_config
+from .markdown import find_file_problem
 from .opencode_parser import OpenCodeParser
 from .parser import ClaudeExportParser
 from .semantic_search import SemanticSearchEngine
@@ -366,6 +367,7 @@ def verify(
     from rich.progress import BarColumn, MofNCompleteColumn
 
     missing = []
+    damaged = []
 
     with Progress(
         SpinnerColumn(),
@@ -380,7 +382,25 @@ def verify(
             file_path = vault_path / conv["file_path"]
             if not file_path.exists():
                 missing.append(conv)
+            else:
+                problem = find_file_problem(file_path)
+                if problem:
+                    damaged.append((conv, problem))
             progress.advance(task)
+
+    if damaged:
+        console.print(
+            f"\n[red]✗ Found {len(damaged)} damaged files "
+            "(present, but cut short or empty):[/red]"
+        )
+        for conv, problem in damaged[:10]:
+            console.print(f"  - {conv['file_path']} {problem}")
+        if len(damaged) > 10:
+            console.print(f"  [dim]... and {len(damaged) - 10} more[/dim]")
+        console.print(
+            "[dim]  Restore them from a backup, or delete the file and sync again "
+            "from the original export. --cleanup does not touch them.[/dim]"
+        )
 
     if missing:
         console.print(f"\n[yellow]⚠ Found {len(missing)} missing files:[/yellow]")
@@ -439,8 +459,13 @@ def verify(
             console.print(
                 "[dim]Preview with: claude-vault verify --cleanup --dry-run[/dim]"
             )
-    else:
+    elif not damaged:
         console.print("\n[green]✓ All conversations verified successfully![/green]")
+
+    if damaged:
+        # Missing entries are fixed by --cleanup; damaged files are not, so scripts
+        # running verify after a bulk operation have to see the failure
+        raise typer.Exit(1)
 
 
 @app.command()

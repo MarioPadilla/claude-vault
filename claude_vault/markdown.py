@@ -1,9 +1,46 @@
+import re
 from pathlib import Path
 from typing import List, Optional
 
 import frontmatter
 
 from .models import Conversation
+
+# One heading per message, in the three forms MarkdownGenerator.generate writes:
+# "## 👤 You", "## 🤖 Claude" and "## **role**", each optionally followed by a time
+_MESSAGE_HEADING = re.compile(
+    r"^## (?:👤 You|🤖 Claude|\*\*.+?\*\*)(?: \*\(.*\)\*)?\s*$", re.MULTILINE
+)
+
+
+def find_file_problem(file_path: Path) -> Optional[str]:
+    """Say what is wrong with a written conversation file, or None if it looks whole.
+
+    Meant to catch a file that was cut short (a failed write truncates it) or
+    emptied, which still exist and still parse, so an existence check passes them.
+    The body is compared with the message_count the generator recorded. Message
+    text can itself contain "## " lines, which can only hide a truncation, never
+    report one that is not there.
+    """
+    try:
+        post = frontmatter.load(file_path)
+    except Exception as e:
+        return f"cannot be read ({type(e).__name__})"
+
+    if not post.metadata and not post.content.strip():
+        return "is empty"
+    if not post.get("uuid"):
+        return "has no uuid in its frontmatter"
+    if not post.content.strip():
+        return "has no conversation text"
+
+    expected = post.get("message_count")
+    if isinstance(expected, int) and expected > 0:
+        found = len(_MESSAGE_HEADING.findall(post.content))
+        if found < expected:
+            return f"holds {found} of {expected} messages"
+
+    return None
 
 
 class MarkdownGenerator:
