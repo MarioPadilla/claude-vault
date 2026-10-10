@@ -191,3 +191,182 @@ def test_sync_redact_pii_keeps_content_hash_stable(tmp_path):
                     assert third["unchanged"] == 1
                     assert third["reanalyzed"] == 0
                     assert third["updated"] == 0
+
+
+def _pii_engine(tmp_path):
+    """Engine over an empty vault, with a parser yielding one stable conversation"""
+    export_file = tmp_path / "conversations.json"
+    export_file.write_text("[]")
+    (tmp_path / ".claude-vault").mkdir()
+    (tmp_path / "conversations").mkdir()
+
+    engine = SyncEngine(tmp_path)
+    return engine, export_file
+
+
+def _analysed(llm_used=True):
+    return PIIScanResult(detected=False, risk_level="none", llm_used=llm_used)
+
+
+def test_sync_skips_unchanged_conversation_already_processed_under_same_pii(
+    tmp_path,
+):
+    """Same content and same PII settings as last time: nothing to redo.
+
+    Regression test for the fast path being bypassed whenever a PII flag was set.
+    """
+    engine, export_file = _pii_engine(tmp_path)
+
+    with patch.object(
+        engine.parser,
+        "parse",
+        side_effect=lambda *_a, **_k: [_make_conv("hello", uuid="conv-fp-001")],
+    ):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed()
+            ) as mock_analyze:
+                first = engine.sync(export_file, detect_pii=True)
+                assert first["new"] == 1
+                assert mock_analyze.call_count == 1
+
+                second = engine.sync(export_file, detect_pii=True)
+                assert second["unchanged"] == 1
+                assert second["reanalyzed"] == 0
+                assert mock_analyze.call_count == 1
+
+
+def test_sync_reanalyzes_when_pii_settings_change(tmp_path):
+    """A different operation must not be skipped as already done.
+
+    Skipping would silently no-op a newly requested flag, e.g. retrofitting
+    --redact-pii onto a conversation that was only scanned before.
+    """
+    engine, export_file = _pii_engine(tmp_path)
+
+    with patch.object(
+        engine.parser,
+        "parse",
+        side_effect=lambda *_a, **_k: [_make_conv("hello", uuid="conv-fp-002")],
+    ):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed()
+            ) as mock_analyze:
+                engine.sync(export_file, detect_pii=True)
+                assert mock_analyze.call_count == 1
+
+                # detect -> redact: different settings, must run again
+                second = engine.sync(export_file, redact_pii=True)
+                assert second["reanalyzed"] == 1
+                assert mock_analyze.call_count == 2
+
+                # and is then skipped under the new settings
+                third = engine.sync(export_file, redact_pii=True)
+                assert third["unchanged"] == 1
+                assert mock_analyze.call_count == 2
+
+
+def test_sync_reanalyzes_when_pii_config_changes(tmp_path):
+    """Changing risk_threshold or use_llm changes the outcome, so it re-runs"""
+    engine, export_file = _pii_engine(tmp_path)
+
+    with patch.object(
+        engine.parser,
+        "parse",
+        side_effect=lambda *_a, **_k: [_make_conv("hello", uuid="conv-fp-003")],
+    ):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed()
+            ) as mock_analyze:
+                engine.sync(export_file, detect_pii=True)
+                assert mock_analyze.call_count == 1
+
+                engine.pii_detector.config.pii.risk_threshold = "high"
+                engine.sync(export_file, detect_pii=True)
+                assert mock_analyze.call_count == 2
+
+                engine.pii_detector.config.pii.use_llm = False
+                engine.sync(export_file, detect_pii=True)
+                assert mock_analyze.call_count == 3
+
+
+def test_sync_does_not_record_pii_done_when_llm_fell_back(tmp_path):
+    """Ollama being down degrades analysis to regex-only, so retry next sync"""
+    engine, export_file = _pii_engine(tmp_path)
+    engine.pii_detector.config.pii.use_llm = True
+
+    with patch.object(
+        engine.parser,
+        "parse",
+        side_effect=lambda *_a, **_k: [_make_conv("hello", uuid="conv-fp-004")],
+    ):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed(llm_used=False)
+            ) as mock_analyze:
+                engine.sync(export_file, detect_pii=True)
+                second = engine.sync(export_file, detect_pii=True)
+                assert second["unchanged"] == 0
+                assert second["reanalyzed"] == 1
+                assert mock_analyze.call_count == 2
+
+            # Once the LLM answers, it is recorded and the next run skips
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed(llm_used=True)
+            ) as mock_analyze:
+                engine.sync(export_file, detect_pii=True)
+                third = engine.sync(export_file, detect_pii=True)
+                assert third["unchanged"] == 1
+                assert mock_analyze.call_count == 1
+
+
+def test_sync_records_pii_done_without_llm_when_llm_disabled(tmp_path):
+    """With use_llm off there is no LLM to wait for, regex-only is complete"""
+    engine, export_file = _pii_engine(tmp_path)
+    engine.pii_detector.config.pii.use_llm = False
+
+    with patch.object(
+        engine.parser,
+        "parse",
+        side_effect=lambda *_a, **_k: [_make_conv("hello", uuid="conv-fp-005")],
+    ):
+        with patch.object(
+            engine.tag_generator,
+            "generate_metadata",
+            return_value={"tags": ["t1", "t2"], "summary": "s"},
+        ):
+            with patch.object(
+                engine.pii_detector, "analyze", return_value=_analysed(llm_used=False)
+            ) as mock_analyze:
+                engine.sync(export_file, detect_pii=True)
+                second = engine.sync(export_file, detect_pii=True)
+                assert second["unchanged"] == 1
+                assert mock_analyze.call_count == 1
+
+
+def test_sync_pii_fingerprint_is_empty_without_pii_handling(tmp_path):
+    engine, _ = _pii_engine(tmp_path)
+
+    assert engine._pii_fingerprint(False, False, False) == ""
+    assert engine._pii_fingerprint(True, False, False) != ""
+    assert engine._pii_fingerprint(True, False, False) != engine._pii_fingerprint(
+        False, True, False
+    )

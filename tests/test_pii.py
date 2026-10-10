@@ -287,3 +287,45 @@ def test_sync_redact_pii_writes_redacted_content(tmp_path):
     content = md_files[0].read_text()
     assert "alice@private.io" not in content
     assert "[REDACTED-EMAIL]" in content
+
+
+# ---------------------------------------------------------------------------
+# llm_used – distinguishes a real LLM verdict from a silent fallback
+# ---------------------------------------------------------------------------
+
+
+def test_classify_with_llm_reports_classified(detector):
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "response": json.dumps({"is_sensitive": False, "risk_level": "none"})
+    }
+    with patch("requests.post", return_value=mock_response):
+        result = detector.classify_with_llm(_make_conv("Let's talk about gardening."))
+    assert result["classified"] is True
+
+
+def test_classify_with_llm_fallback_is_not_classified(detector):
+    with patch("requests.post", side_effect=Exception("Connection refused")):
+        result = detector.classify_with_llm(_make_conv("Some content"))
+    assert result["classified"] is False
+
+
+def test_analyze_marks_llm_used_only_when_llm_answered(detector):
+    conv = _make_conv("Nothing sensitive here.")
+    mock_post = Mock(status_code=200)
+    mock_post.json.return_value = {
+        "response": json.dumps({"is_sensitive": False, "risk_level": "none"})
+    }
+
+    with patch("requests.get", return_value=Mock(status_code=200)):
+        with patch("requests.post", return_value=mock_post):
+            assert detector.analyze(conv, use_llm=True).llm_used is True
+
+        with patch("requests.post", side_effect=Exception("timeout")):
+            assert detector.analyze(conv, use_llm=True).llm_used is False
+
+    # Ollama unreachable, or LLM disabled: never used
+    with patch("requests.get", side_effect=Exception("down")):
+        assert detector.analyze(conv, use_llm=True).llm_used is False
+    assert detector.analyze(conv, use_llm=False).llm_used is False
