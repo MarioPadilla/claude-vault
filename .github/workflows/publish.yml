@@ -4,6 +4,7 @@ on:
   release:
     types: [published]
   workflow_dispatch: # enable manual triggering
+  workflow_call: # called by release-please.yml once a release is created
 
 jobs:
   publish:
