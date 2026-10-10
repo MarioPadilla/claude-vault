@@ -3,7 +3,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Tuple
 
 import requests
 
@@ -34,13 +34,38 @@ def _looks_random(token: str) -> bool:
 
     Hex digests (git SHAs, md5, sha256, uuids without dashes) top out at 4 bits
     of entropy per character, so a threshold just above that excludes them.
-    Identifiers and slugs are excluded by requiring digits mixed in.
+    Subresource-integrity hashes and slugs or identifiers built from several
+    plain lowercase words ("get_user_profile_by_id_2024") are excluded too.
     """
+    if re.match(r"(?:sha(?:1|256|384|512)|md5)-", token):
+        return False
     if sum(c.isdigit() for c in token) < 2 or not any(c.isalpha() for c in token):
+        return False
+    words = [w for w in re.split(r"[_\-]", token) if re.fullmatch(r"[a-z]{3,}", w)]
+    if len(words) >= 3:
         return False
     counts = Counter(token)
     entropy = -sum(n / len(token) * math.log2(n / len(token)) for n in counts.values())
     return entropy > 4.1
+
+
+_NON_SECRET_LITERALS = {"null", "none", "nil", "true", "false", "undefined"}
+
+
+def _plausible_credential_value(value: str) -> bool:
+    """Reject values of `password = ...` that are obviously not a secret"""
+    if value.lower() in _NON_SECRET_LITERALS:
+        return False
+    # Reference to an environment variable or template, not the secret itself
+    if value[0] in "$%":
+        return False
+    # Attribute access such as settings.SECRET_KEY or self.token
+    if re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+", value):
+        return False
+    # Short numbers are counts and limits (token_count: 1200), not secrets
+    if value.isdigit() and len(value) < 6:
+        return False
+    return True
 
 
 @dataclass
@@ -62,9 +87,12 @@ class PIIDetector:
     # Compiled regex patterns keyed by PII type. Order matters for redaction:
     # a pattern that swallows a larger span must run before ones it contains.
     REGEX_PATTERNS: Dict[str, re.Pattern] = {
-        # Whole key block, or to the end of the text if it was truncated
+        # The whole block; or, when it was truncated, the header plus the base64
+        # lines after it. A bare header mentioned in prose is left alone.
         "private_key": re.compile(
-            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)"
+            r"-----BEGIN [A-Z ]{0,30}PRIVATE KEY-----"
+            r"(?:[\s\S]{0,8192}?-----END [A-Z ]{0,30}PRIVATE KEY-----"
+            r"|(?:\s*[A-Za-z0-9+/=]{16,}){1,200})"
         ),
         # scheme://user:password@host, before email so its user:pass@ is not
         # reported as an address
@@ -83,7 +111,7 @@ class PIIDetector:
         "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
         "credit_card": re.compile(r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b"),
         "jwt": re.compile(
-            r"\beyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]*"
+            r"\beyJ[A-Za-z0-9_\-]{8,256}\.eyJ[A-Za-z0-9_\-]{8,2048}\.[A-Za-z0-9_\-]{0,1024}"
         ),
         # Provider-specific token formats
         "api_key": re.compile(
@@ -96,6 +124,11 @@ class PIIDetector:
             r"|(?:AKIA|ASIA)[0-9A-Z]{16}"  # AWS access key id
             r"|xox[abprs]-[A-Za-z0-9\-]{10,}"  # Slack
             r"|[sr]k_(?:live|test)_[A-Za-z0-9]{16,}"  # Stripe
+            r"|glpat-[A-Za-z0-9_\-]{20,}"  # GitLab
+            r"|hf_[A-Za-z0-9]{34,}"  # Hugging Face
+            r"|npm_[A-Za-z0-9]{36}"  # npm
+            r"|ya29\.[A-Za-z0-9_\-]{20,}"  # Google OAuth
+            r"|SG\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}"  # SendGrid
             r")\b"
             r"|(?i:\b(?:Bearer|Basic))\s+[A-Za-z0-9\-._~+/]{16,}=*"  # Authorization
         ),
@@ -103,21 +136,28 @@ class PIIDetector:
             r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
             r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b"
         ),
-        # name = value where the name says it is a secret, e.g.
-        # AWS_SECRET_ACCESS_KEY=..., password: ..., but not max_tokens = 4096
+        # name = value where the name says it is a secret. Only the value is
+        # replaced (the named group), so the name and any delimiters survive.
+        # An unquoted value must end at a delimiter, which rules out calls and
+        # expressions such as `token = self.next()`.
         "credential_context": re.compile(
-            r"(?i)(?<![\w\-])[\w\-]{0,40}?"
-            r"(?:password|passwd|secret|token|api[_\-]?key|access[_\-]?key)"
+            r"(?i)(?:password|passwd|secret|token|api[_\-]?key|access[_\-]?key)"
             r"(?:[_\-][\w\-]{0,40})?[\"']?\s*[:=]\s*"
-            r"(?!\d+\b)(?:\"[^\"\n]{4,}\"|'[^'\n]{4,}'|[\"']?\S{4,})"
+            r"(?:\"(?P<dq>[^\"\n]{4,})\""
+            r"|'(?P<sq>[^'\n]{4,})'"
+            r"|(?P<raw>[^\s\"'`,;(){}\[\]<>]{4,})(?=[\s\"'`,;)}\]>]|\Z))"
         ),
-        # Last: anything long and random-looking that no rule above recognised
-        "secret_token": re.compile(r"\b[A-Za-z0-9_\-]{32,}\b"),
+        # Last: anything long and random-looking that no rule above recognised.
+        # Not part of a base64 run, which the pattern would otherwise cut up.
+        "secret_token": re.compile(
+            r"(?<![A-Za-z0-9_\-+/])[A-Za-z0-9_\-]{32,}(?![A-Za-z0-9_\-+/=])"
+        ),
     }
 
     # Extra check on a regex match, to cut false positives the pattern cannot
     _VALIDATORS: Dict[str, Callable[[str], bool]] = {
         "credit_card": _luhn_valid,
+        "credential_context": _plausible_credential_value,
         "secret_token": _looks_random,
     }
 
@@ -143,30 +183,44 @@ class PIIDetector:
     # Public API
     # ------------------------------------------------------------------
 
+    def _find_spans(self, text: str) -> List[Tuple[int, int, str]]:
+        """Locate sensitive spans as (start, end, type), in text order.
+
+        Patterns run in order, and each span found is blanked before the next
+        pattern runs. A later pattern therefore cannot re-report part of it (the
+        user:pass@ of a connection string is not also an email address), and
+        scan() and redact() always agree on what was found.
+        """
+        spans: List[Tuple[int, int, str]] = []
+        remaining = text
+
+        for pii_type, pattern in self.REGEX_PATTERNS.items():
+            valid = self._VALIDATORS.get(pii_type)
+            found: List[Tuple[int, int]] = []
+            for m in pattern.finditer(remaining):
+                # A pattern may name the exact part to replace, else the match
+                start, end = m.span(m.lastgroup) if m.lastgroup else m.span()
+                if valid is None or valid(remaining[start:end]):
+                    found.append((start, end))
+            if not found:
+                continue
+
+            spans.extend((start, end, pii_type) for start, end in found)
+            parts, pos = [], 0
+            for start, end in found:
+                parts.append(remaining[pos:start])
+                parts.append(" " * (end - start))
+                pos = end
+            parts.append(remaining[pos:])
+            remaining = "".join(parts)
+
+        return sorted(spans)
+
     def scan(self, text: str) -> PIIScanResult:
         """Run regex-only scan on a block of text."""
         matches: Dict[str, List[str]] = {}
-
-        # Same order as redact(): once a pattern claims a span it is blanked, so a
-        # later pattern cannot re-report part of it (the user:pass@ of a
-        # connection string is not also an email address)
-        remaining = text
-        for pii_type, pattern in self.REGEX_PATTERNS.items():
-            valid = self._VALIDATORS.get(pii_type)
-            found = [
-                m
-                for m in pattern.finditer(remaining)
-                if valid is None or valid(m.group(0))
-            ]
-            if not found:
-                continue
-            matches[pii_type] = [m.group(0) for m in found]
-            for m in reversed(found):
-                remaining = (
-                    remaining[: m.start()]
-                    + " " * (m.end() - m.start())
-                    + remaining[m.end() :]
-                )
+        for start, end, pii_type in self._find_spans(text):
+            matches.setdefault(pii_type, []).append(text[start:end])
 
         detected = bool(matches)
         risk_level = self._compute_risk(list(matches.keys()))
@@ -180,23 +234,13 @@ class PIIDetector:
 
     def redact(self, text: str) -> str:
         """Replace all detected PII in *text* with [REDACTED-TYPE] placeholders."""
-        for pii_type, pattern in self.REGEX_PATTERNS.items():
-            placeholder = f"[REDACTED-{pii_type.upper().replace('_', '-')}]"
-            valid = self._VALIDATORS.get(pii_type)
-
-            def replace(
-                match: "re.Match[str]",
-                placeholder: str = placeholder,
-                valid: Optional[Callable[[str], bool]] = valid,
-            ) -> str:
-                return (
-                    placeholder
-                    if valid is None or valid(match.group(0))
-                    else match.group(0)
-                )
-
-            text = pattern.sub(replace, text)
-        return text
+        parts, pos = [], 0
+        for start, end, pii_type in self._find_spans(text):
+            parts.append(text[pos:start])
+            parts.append(f"[REDACTED-{pii_type.upper().replace('_', '-')}]")
+            pos = end
+        parts.append(text[pos:])
+        return "".join(parts)
 
     def classify_with_llm(self, conversation: Conversation) -> Dict:
         """

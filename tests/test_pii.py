@@ -475,6 +475,17 @@ ADVERSARIAL_INPUTS = {
 }
 
 
+ADVERSARIAL_INPUTS.update(
+    {
+        "jwt_run": "eyJ-" * 50_000,
+        "jwt_dots": "eyJabcdefghij.eyJabcdefghij." * 8_000,
+        "key_header_run": "-----BEGIN PRIVATE KEY-----\n" * 8_000,
+        "quote_run": 'password="' * 20_000,
+        "provider_prefix_run": "sk-ant-" * 30_000,
+    }
+)
+
+
 @pytest.mark.parametrize("name", sorted(ADVERSARIAL_INPUTS))
 def test_scan_and_redact_run_in_linear_time_on_adversarial_input(detector, name):
     """Unbounded repetition in a pattern backtracks quadratically (60s+ at 200k)"""
@@ -517,3 +528,77 @@ def test_redact_removes_whole_quoted_passphrase(detector):
 )
 def test_scan_ignores_numeric_token_counts(detector, text):
     assert not detector.scan(text).detected
+
+
+# ---------------------------------------------------------------------------
+# Redaction must replace the secret only, and leave surrounding text intact
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Check the header -----BEGIN PRIVATE KEY----- is present.\nThen run the tests.\n",
+        '{"password": null}',
+        '{"token": null, "x": 1}',
+        'password = input("Enter password: ")',
+        "token = self.next_token_value()",
+        "secret_key = settings.SECRET_KEY",
+        "password=$DB_PASSWORD",
+        '"integrity": "sha512-pKvURIxJ9ZbQ1xN2kE8mR4vYtWc7LdFgHs3uAo6jXz0Bn5Cq1PeV8iTyM2wDlGaRk4=="',
+        "SELECT get_user_profile_by_identifier_2024_v3_final_build_17_rc2 FROM t",
+    ],
+)
+def test_redact_leaves_code_and_prose_untouched(detector, text):
+    assert detector.redact(text) == text
+
+
+@pytest.mark.parametrize(
+    "text, kept",
+    [
+        ("login(password=hunter22x)", ("login(password=", ")")),
+        ("secret=abcd1234efgh5678,next=1", ("secret=", ",next=1")),
+        ('{"password": "hunter2hunter2"}', ('{"password": "', '"}')),
+    ],
+)
+def test_redact_replaces_only_the_value(detector, text, kept):
+    redacted = detector.redact(text)
+    assert redacted.startswith(kept[0]) and redacted.endswith(kept[1])
+    assert "[REDACTED-CREDENTIAL-CONTEXT]" in redacted
+
+
+@pytest.mark.parametrize(
+    "text, secret",
+    [
+        ("password=12345678 is the wifi pass", "12345678"),
+        ('password="correct horse battery"', "horse"),
+        ("postgres://app:Xy7/kQ9pL2@db.example.com:5432/prod", "kQ9pL2"),
+        ("glpat-abcdefghij1234567890", "abcdefghij"),
+        ("SG.abcdefghijklmnopqrstuv." + "A" * 20 + "0123456789abcdefg", "abcdefghij"),
+        (
+            "x\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC",
+            "MIIEvQIB",
+        ),
+    ],
+)
+def test_redact_removes_secrets_that_used_to_leak(detector, text, secret):
+    assert secret not in detector.redact(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "password=sk-proj-abcdefghijklmnopqrstuv",
+        "token=user@example.com",
+        "postgres://admin:hunter2@db.internal:5432/prod",
+        "Authorization: Bearer abc123def456ghi789xyz",
+    ],
+)
+def test_scan_and_redact_agree_on_what_was_found(detector, text):
+    """The type scan() reports is the placeholder redact() writes"""
+    pii_types = detector.scan(text).pii_types
+    redacted = detector.redact(text)
+
+    assert pii_types
+    for pii_type in pii_types:
+        assert f"[REDACTED-{pii_type.upper().replace('_', '-')}]" in redacted
